@@ -38,7 +38,9 @@ def csrf_token():
 
 @app.context_processor
 def globals_for_templates():
-    return {"me": current_user(), "csrf_token": csrf_token}
+    with db() as con:
+        site_status = con.execute("SELECT * FROM status WHERE id=1").fetchone()
+    return {"me": current_user(), "csrf_token": csrf_token, "site_status": site_status}
 
 @app.before_request
 def csrf_guard():
@@ -193,7 +195,7 @@ def home():
     with db() as con:
         st = con.execute("SELECT * FROM status WHERE id=1").fetchone()
         events = con.execute(
-            "SELECT * FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 7"
+            "SELECT * FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 8"
         ).fetchall()
         posts = con.execute("""
           SELECT p.*,u.username,
@@ -201,9 +203,18 @@ def home():
           (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count
           FROM posts p JOIN users u ON u.id=p.user_id
           WHERE p.parent_id IS NULL
-          ORDER BY p.created_at DESC LIMIT 15
+          ORDER BY p.created_at DESC LIMIT 4
         """).fetchall()
     return render_template("home.html", st=st, events=events, posts=posts)
+
+@app.get("/status")
+def status_page():
+    with db() as con:
+        st = con.execute("SELECT * FROM status WHERE id=1").fetchone()
+        events = con.execute(
+            "SELECT * FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 40"
+        ).fetchall()
+    return render_template("status.html", st=st, events=events)
 
 @app.get("/api/status")
 def api_status():
@@ -344,7 +355,8 @@ def create_post():
 
 @app.get("/forum")
 def forum():
-    return redirect(url_for("home") + "#forum")
+    posts = feed_query("WHERE p.parent_id IS NULL")
+    return render_template("forum.html", posts=posts)
 
 @app.get("/p/<int:post_id>")
 def post_detail(post_id):
