@@ -381,7 +381,8 @@ def home():
         posts = con.execute("""
           SELECT p.*,u.username,
           (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
-          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count
+          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+          (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
           FROM posts p JOIN users u ON u.id=p.user_id
           WHERE p.parent_id IS NULL
           ORDER BY p.created_at DESC LIMIT 4
@@ -806,7 +807,8 @@ def post_detail(post_id):
         post = con.execute("""
           SELECT p.*,u.username,
           (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
-          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count
+          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+          (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
           FROM posts p JOIN users u ON u.id=p.user_id WHERE p.id=?
         """, (post_id,)).fetchone()
         if not post:
@@ -814,7 +816,8 @@ def post_detail(post_id):
         replies = con.execute("""
           SELECT p.*,u.username,
           (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
-          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count
+          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+          (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
           FROM posts p JOIN users u ON u.id=p.user_id
           WHERE p.parent_id=? ORDER BY p.created_at ASC
         """, (post_id,)).fetchall()
@@ -863,7 +866,8 @@ def profile(username):
         posts = con.execute("""
           SELECT p.*,u.username,
           (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
-          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count
+          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+          (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
           FROM posts p JOIN users u ON u.id=p.user_id
           WHERE p.user_id=? AND p.parent_id IS NULL ORDER BY p.created_at DESC
         """, (user["id"],)).fetchall()
