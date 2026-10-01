@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Форум · Мама-птица{% endblock %}
+{% block content %}
+<section class="forum-shell">
+  <div class="forum-main">
+    <div class="forum-titlebar">
+      <div><span class="eyebrow">COMMUNITY</span><h1>Форум</h1><p>Лента в стиле X: юзернеймы, фото, ответы, лайки и просмотры.</p></div>
+      <a class="cta" href="/">← Главная</a>
+    </div>
+
+    {% if me %}
+    <form class="composer forum-composer" action="/post" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+      <div class="avatar big">{{me.username[:1]|upper}}</div>
+      <div class="composebody">
+        <textarea data-autogrow name="body" maxlength="500" placeholder="Что происходит? Упомяни @mellai, если хочешь задать вопрос."></textarea>
+        <div class="composebottom">
+          <label class="uploadbtn">▧ Добавить фото<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
+          <span class="limit">500 символов</span>
+          <button class="publish">Опубликовать</button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <div class="loginbanner"><div><b>Войди в аккаунт</b><span>Чтобы писать посты, отвечать и прикреплять фотографии.</span></div><a href="/login?next=/forum">Войти</a></div>
+    {% endif %}
+
+    <div class="forum-feed">
+      {% for p in posts %}{% include "_post.html" %}{% else %}<div class="empty">Публикаций пока нет.</div>{% endfor %}
+    </div>
+  </div>
+
+  <aside class="forum-side">
+    <div class="sidecard sticky-card">
+      <span class="eyebrow">LIVE STATUS</span>
+      <h3>{{site_status.label}}</h3>
+      <p>{{site_status.detail}}</p>
+      <a href="/status">Открыть статус →</a>
+    </div>
+    <div class="sidecard">
+      <span class="eyebrow">BOT</span>
+      <h3>@mellai</h3>
+      <p>Отвечает только на вопросы о Mellstroy. Его логику здесь не меняли.</p>
+      <a href="/u/mellai">Профиль →</a>
+    </div>
+  </aside>
+</section>
+{% endblock %}
