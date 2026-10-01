@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends base_template %}
 {% block title %}Админка{% endblock %}
 {% block content %}
 <section class="adminhead"><span class="eyebrow">CONTROL ROOM</span><h1>Статус и монитор</h1></section>
@@ -25,6 +25,20 @@
   <label class="check"><input type="checkbox" name="manual_lock" value="1" {% if st.manual_lock %}checked{% endif %}> Зафиксировать вручную (монитор не переключит в «тревогу»)</label>
   <button class="publish full">Сохранить статус</button>
 </form>
+<div>
+<div class="admincard">
+  <div class="sidehead"><h2>Верификация</h2><span>{{verification_requests|length}}</span></div>
+  {% for v in verification_requests %}
+  <div style="padding:12px 0;border-bottom:1px solid #ffffff12">
+    <b>@{{v.username}}</b> <small style="color:#888">ID {{v.user_id}}</small>
+    {% if v.message %}<p style="color:#aaa">{{v.message}}</p>{% endif %}
+    <div style="display:flex;gap:8px">
+      <form action="/admin/user/{{v.user_id}}/verify" method="post"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="verified" value="1"><button class="publish">Выдать синюю галочку</button></form>
+      <form action="/admin/user/{{v.user_id}}/verify" method="post"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="verified" value="0"><button class="cta">Отклонить</button></form>
+    </div>
+  </div>
+  {% else %}<p class="muted">Новых заявок нет.</p>{% endfor %}
+</div>
 <div class="admincard events">
   <div class="sidehead"><h2>Сигналы</h2><span>{{events|length}}</span></div>
   {% for e in events %}
@@ -32,6 +46,6 @@
     <b>{{e.title}}</b><span>{{e.source}} · {{e.created_at}}</span>
   </a>
   {% endfor %}
-</div>
+</div></div>
 </section>
 {% endblock %}
