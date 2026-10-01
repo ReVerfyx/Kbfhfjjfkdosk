@@ -275,7 +275,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         creatingPost = true
         viewModelScope.launch {
             try {
-                val parts = client.makePostParts(getApplication(), body.trim(), imageUri, parentId)
+                val parts = client.makePostParts(getApplication<Application>(), body.trim(), imageUri, parentId)
                 val response = api.createPost(parts)
                 if (response.isSuccessful) {
                     message = if (parentId == null) "Опубликовано" else "Ответ отправлен"
