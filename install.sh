@@ -27,9 +27,11 @@ fi
 systemctl enable --now ollama 2>/dev/null || true
 ollama pull qwen2.5:1.5b || true
 
-SECRET="$(openssl rand -hex 32)"
-ADMIN_PASS="$(openssl rand -hex 12)"
-cat >/etc/mama-bird.env <<EOF
+ADMIN_PASS=""
+if [ ! -f /etc/mama-bird.env ]; then
+  SECRET="$(openssl rand -hex 32)"
+  ADMIN_PASS="$(openssl rand -hex 12)"
+  cat >/etc/mama-bird.env <<EOF
 MW_SECRET_KEY=$SECRET
 MW_ADMIN_USER=admin
 MW_ADMIN_PASSWORD=$ADMIN_PASS
@@ -39,6 +41,13 @@ MW_HTTPS=0
 MW_OLLAMA_URL=http://127.0.0.1:11434
 MW_MELLAI_MODEL=qwen2.5:1.5b
 EOF
+else
+  if grep -q '^MW_MELLAI_MODEL=' /etc/mama-bird.env; then
+    sed -i 's/^MW_MELLAI_MODEL=.*/MW_MELLAI_MODEL=qwen2.5:1.5b/' /etc/mama-bird.env
+  else
+    echo 'MW_MELLAI_MODEL=qwen2.5:1.5b' >> /etc/mama-bird.env
+  fi
+fi
 chmod 600 /etc/mama-bird.env
 chown -R www-data:www-data "$APP/data" "$APP/static/uploads"
 
@@ -123,9 +132,13 @@ echo
 echo "============================================"
 echo "Сайт: http://$IP/"
 echo "Админ: admin"
-echo "Пароль: $ADMIN_PASS"
+if [ -n "$ADMIN_PASS" ]; then
+  echo "Пароль: $ADMIN_PASS"
+  echo "СОХРАНИ ПАРОЛЬ СЕЙЧАС"
+else
+  echo "Пароль администратора сохранён прежний"
+fi
 echo "@mellai: Qwen2.5 1.5B через Ollama"
-echo "СОХРАНИ ПАРОЛЬ СЕЙЧАС"
 echo
 echo "Источники: $APP/sources.json"
 echo "Сайт: journalctl -u mama-bird -f"
