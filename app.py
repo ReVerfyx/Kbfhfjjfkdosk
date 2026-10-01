@@ -38,7 +38,6 @@ def csrf_token():
         session["_csrf"] = token
     return token
 
-@app.context_processor
 def is_mobile_request():
     forced = request.args.get("view")
     if forced == "mobile":
