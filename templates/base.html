@@ -4,7 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#07080c">
-  <title>{% block title %}МАМА-ПТИЦА{% endblock %}</title>
+  <meta name="description" content="Спасаем маму-птицу — неофициальный монитор публичной информации о Mellstroy, статус, форум и @mellai.">
+  <meta property="og:site_name" content="Спасаем маму-птицу">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{% block og_title %}Спасаем маму-птицу{% endblock %}">
+  <meta property="og:description" content="Статус Mellstroy, публичные сигналы, форум и @mellai.">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="{{ canonical_url }}">
+  <link rel="manifest" href="/site.webmanifest">
+  <title>{% block title %}Спасаем маму-птицу{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
 </head>
 <body class="{% if site_status and site_status.code in ['alert','possibly_detained','confirmed_detained','storm','strange'] %}alarm-active alarm-{{site_status.code}}{% else %}calm-mode{% endif %}">
@@ -17,7 +26,7 @@
 </div>
 {% endif %}
 <nav>
-  <a class="brand" href="/"><span class="brandmark">М</span><span>МАМА-ПТИЦА</span></a>
+  <a class="brand" href="/"><span class="brandmark">М</span><span>СПАСАЕМ МАМУ-ПТИЦУ</span></a>
   <div class="navlinks">
     <a href="/">Главная</a>
     <a href="/status">Статус</a>
@@ -41,7 +50,7 @@
 {% endwith %}
 {% block content %}{% endblock %}
 </main>
-<footer><b>МАМА-ПТИЦА</b> · неофициальный монитор публичных источников · без точной геолокации и частных данных</footer>
+<footer><b>СПАСАЕМ МАМУ-ПТИЦУ</b> · <a href="{{ public_url }}">{{ public_url|replace('https://','') }}</a> · неофициальный монитор публичных источников · без точной геолокации и частных данных</footer>
 <script>
 document.querySelectorAll('[data-autogrow]').forEach(t=>{
   const f=()=>{t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'};
