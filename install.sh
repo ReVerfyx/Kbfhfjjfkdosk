@@ -6,7 +6,7 @@ APP=/opt/mama-bird
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip nginx openssl
+DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip nginx openssl curl
 
 mkdir -p "$APP/data" "$APP/static/uploads"
 cp "$SRC/app.py" "$SRC/db.py" "$SRC/monitor.py" "$SRC/sources.json" "$SRC/requirements.txt" "$APP/"
@@ -20,6 +20,13 @@ python3 -m venv "$APP/venv"
 "$APP/venv/bin/pip" install --upgrade pip
 "$APP/venv/bin/pip" install -r "$APP/requirements.txt"
 
+# Локальный очень лёгкий ИИ для @mellai.
+if ! command -v ollama >/dev/null 2>&1; then
+  curl -fsSL https://ollama.com/install.sh | sh || true
+fi
+systemctl enable --now ollama 2>/dev/null || true
+ollama pull qwen2.5:0.5b || true
+
 SECRET="$(openssl rand -hex 32)"
 ADMIN_PASS="$(openssl rand -hex 12)"
 cat >/etc/mama-bird.env <<EOF
@@ -29,6 +36,8 @@ MW_ADMIN_PASSWORD=$ADMIN_PASS
 MW_DB=$APP/data/app.db
 MW_SOURCES=$APP/sources.json
 MW_HTTPS=0
+MW_OLLAMA_URL=http://127.0.0.1:11434
+MW_MELLAI_MODEL=qwen2.5:0.5b
 EOF
 chmod 600 /etc/mama-bird.env
 chown -R www-data:www-data "$APP/data" "$APP/static/uploads"
@@ -36,7 +45,7 @@ chown -R www-data:www-data "$APP/data" "$APP/static/uploads"
 cat >/etc/systemd/system/mama-bird.service <<EOF
 [Unit]
 Description=Mama Bird status + social web app
-After=network.target
+After=network.target ollama.service
 
 [Service]
 WorkingDirectory=$APP
@@ -115,6 +124,7 @@ echo "============================================"
 echo "Сайт: http://$IP/"
 echo "Админ: admin"
 echo "Пароль: $ADMIN_PASS"
+echo "@mellai: Qwen2.5 0.5B через Ollama"
 echo "СОХРАНИ ПАРОЛЬ СЕЙЧАС"
 echo
 echo "Источники: $APP/sources.json"
