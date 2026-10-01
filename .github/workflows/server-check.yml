@@ -41,10 +41,15 @@ jobs:
               ("mobile", "Mozilla/5.0 (Linux; Android 16; Mobile) Chrome/140"),
           ]
           for name, ua in cases:
-              for path in ("/", "/status", "/streams", "/forum", "/login", "/register"):
+              for path in ("/", "/status", "/streams", "/forum", "/support", "/u/admin", "/login", "/register"):
                   response = client.get(path, headers={"User-Agent": ua})
                   assert response.status_code == 200, (name, path, response.status_code)
                   assert b"Traceback" not in response.data
                   print(name, path, response.status_code, len(response.data))
+          for path in ("/api/v1/status", "/api/v1/feed", "/api/v1/support"):
+              response = client.get(path)
+              assert response.status_code == 200, (path, response.status_code)
+              assert response.is_json, path
+              print("api", path, response.status_code)
           print("backend render ok")
           PY
