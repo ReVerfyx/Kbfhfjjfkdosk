@@ -1,4 +1,4 @@
-import os, re, secrets, time, uuid
+import os, re, secrets, time, uuid, requests
 from functools import wraps
 from pathlib import Path
 
@@ -25,7 +25,8 @@ app.config.update(
 init_db()
 
 USERNAME_RE = re.compile(r"^[A-Za-zА-Яа-я0-9_.-]{3,24}$")
-ALLOWED_STATUS = {"checking", "ok", "alert", "possibly_detained", "confirmed_detained"}
+ALLOWED_STATUS = {"checking", "ok", "alert", "possibly_detained", "confirmed_detained", "storm", "strange"}
+MELLAI_KEYS = ("mellstroy", "меллстрой", "мелл", "бурим", "андрей")
 _login_fail = {}
 
 def csrf_token():
@@ -117,6 +118,76 @@ def feed_query(where="", params=()):
     with db() as con:
         return con.execute(sql, params).fetchall()
 
+def ensure_mellai():
+    with db() as con:
+        if not con.execute("SELECT 1 FROM users WHERE username='mellai'").fetchone():
+            con.execute(
+                "INSERT INTO users(username,password_hash,is_admin) VALUES(?,?,0)",
+                ("mellai", generate_password_hash(secrets.token_hex(24), method="scrypt"))
+            )
+
+def mellai_reply(body):
+    low = (body or "").lower()
+    if "@mellai" not in low:
+        return None
+    if not any(k in low for k in MELLAI_KEYS):
+        return "Я отвечаю только на вопросы о Mellstroy."
+    with db() as con:
+        st = con.execute("SELECT * FROM status WHERE id=1").fetchone()
+        events = con.execute(
+            "SELECT source,title,url,summary,published_at,official,urgent FROM monitor_events "
+            "ORDER BY COALESCE(published_at,created_at) DESC LIMIT 6"
+        ).fetchall()
+    context = [
+        f"Статус: {st['label']}",
+        f"Описание: {st['detail']}",
+        f"Публично сообщаемое местоположение: {st['location']}",
+        f"Обновлено: {st['updated_at']}",
+    ]
+    for i, e in enumerate(events, 1):
+        context.append(f"Сигнал {i}: {e['title']} | {e['source']} | {e['url']}")
+    prompt = (
+        "Ты @mellai — очень короткий русскоязычный бот фан-сайта о Mellstroy. "
+        "Отвечай ТОЛЬКО по Mellstroy и ТОЛЬКО по контексту ниже. Не выдумывай. "
+        "Неподтвержденные сведения называй неподтвержденными. Не давай точные адреса, GPS, "
+        "частную геолокацию или способы отследить человека. Максимум 4 коротких предложения.\n\n"
+        "КОНТЕКСТ:\n" + "\n".join(context) + "\n\nВОПРОС:\n" + re.sub(r"@mellai", "", body, flags=re.I).strip()
+    )
+    try:
+        base = os.getenv("MW_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+        model = os.getenv("MW_MELLAI_MODEL", "qwen2.5:0.5b")
+        r = requests.post(
+            base + "/api/generate",
+            json={"model": model, "prompt": prompt, "stream": False,
+                  "options": {"temperature": 0.2, "num_predict": 160}},
+            timeout=25,
+        )
+        if r.ok:
+            out = (r.json().get("response") or "").strip()
+            if out:
+                return out[:1200]
+    except Exception as e:
+        print("mellai fallback:", e)
+    if "где" in low or "наход" in low:
+        return f"Публично сообщаемое местоположение: {st['location']}. Точные адреса сайт не отслеживает."
+    if "новост" in low or "послед" in low or "стрим" in low:
+        if events:
+            return f"Последний сигнал: {events[0]['title']} — {events[0]['source']}."
+        return "Нет подтверждённых свежих данных в мониторе."
+    return f"Текущий статус: {st['label']}. {st['detail']}"
+
+def maybe_mellai(parent_post_id, body):
+    answer = mellai_reply(body)
+    if not answer:
+        return
+    with db() as con:
+        bot = con.execute("SELECT id FROM users WHERE username='mellai'").fetchone()
+        if bot:
+            con.execute(
+                "INSERT INTO posts(user_id,body,parent_id) VALUES(?,?,?)",
+                (bot["id"], answer, parent_post_id),
+            )
+
 @app.get("/")
 def home():
     with db() as con:
@@ -183,6 +254,8 @@ def register():
             flash("CAPTCHA введена неверно.")
         elif not USERNAME_RE.fullmatch(username):
             flash("Логин: 3–24 символа, буквы/цифры/._-")
+        elif username.lower() == "mellai":
+            flash("Этот юзернейм зарезервирован.")
         elif len(password) < 8:
             flash("Пароль должен быть не короче 8 символов.")
         else:
@@ -257,11 +330,14 @@ def create_post():
         flash("Максимум 500 символов.")
         return redirect(request.referrer or url_for("home"))
     with db() as con:
-        con.execute(
+        cur = con.execute(
             "INSERT INTO posts(user_id,body,image_path,parent_id) VALUES(?,?,?,?)",
             (session["uid"], body, image_path, parent)
         )
+        post_id = cur.lastrowid
     session["last_post_at"] = time.time()
+    if body:
+        maybe_mellai(parent or post_id, body)
     if parent:
         return redirect(url_for("post_detail", post_id=parent))
     return redirect(url_for("home") + "#forum")
@@ -279,7 +355,6 @@ def post_detail(post_id):
         sid.append(post_id)
         session["viewed_posts"] = sid[-80:]
         session.modified = True
-
     with db() as con:
         post = con.execute("""
           SELECT p.*,u.username,
@@ -368,4 +443,5 @@ def bootstrap_admin():
                 (username, generate_password_hash(password, method="scrypt"))
             )
 
+ensure_mellai()
 bootstrap_admin()
