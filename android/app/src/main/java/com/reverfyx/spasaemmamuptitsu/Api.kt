@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import okhttp3.Dns
 import okhttp3.Interceptor
 import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
@@ -53,7 +54,7 @@ private class UriRequestBody(
     private val uri: Uri,
     private val mime: String
 ) : RequestBody() {
-    override fun contentType(): MediaType? = MediaType.parse(mime)
+    override fun contentType(): MediaType? = mime.toMediaTypeOrNull()
 
     override fun contentLength(): Long {
         return try {
@@ -84,11 +85,13 @@ class ApiClient(private val context: Context, private val session: SessionStore)
 
     private val gson = Gson()
 
-    private val pinnedDns = Dns { hostname ->
-        if (hostname.equals(TLS_HOST, ignoreCase = true)) {
-            listOf(InetAddress.getByName(SERVER_IP))
-        } else {
-            Dns.SYSTEM.lookup(hostname)
+    private val pinnedDns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            return if (hostname.equals(TLS_HOST, ignoreCase = true)) {
+                listOf(InetAddress.getByName(SERVER_IP))
+            } else {
+                Dns.SYSTEM.lookup(hostname)
+            }
         }
     }
 
