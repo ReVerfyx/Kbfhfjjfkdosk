@@ -48,6 +48,41 @@ def init_db():
           FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS reposts(
+          user_id INTEGER NOT NULL,
+          post_id INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(user_id, post_id),
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY(post_id) REFERENCES posts(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS stream_status(
+          id INTEGER PRIMARY KEY CHECK(id=1),
+          is_live INTEGER NOT NULL DEFAULT 0,
+          platform TEXT NOT NULL DEFAULT 'Kick',
+          title TEXT NOT NULL DEFAULT '',
+          url TEXT,
+          viewers TEXT,
+          last_online TEXT,
+          source TEXT,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT OR IGNORE INTO stream_status(id) VALUES(1);
+
+        CREATE TABLE IF NOT EXISTS stream_history(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          started_at TEXT,
+          ended_at TEXT,
+          duration TEXT,
+          viewers TEXT,
+          url TEXT,
+          source TEXT NOT NULL,
+          fingerprint TEXT UNIQUE NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS monitor_events(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           source TEXT NOT NULL,
