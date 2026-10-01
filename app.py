@@ -1,12 +1,13 @@
-import os, re, secrets, time, uuid, requests
+import os, re, secrets, time, uuid, requests, hashlib, base64
 from functools import wraps
 from pathlib import Path
+from io import BytesIO
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session, abort,
     jsonify, Response, flash
 )
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import db, init_db
 
@@ -29,6 +30,7 @@ USERNAME_RE = re.compile(r"^[A-Za-zА-Яа-я0-9_.-]{3,24}$")
 ALLOWED_STATUS = {"checking", "ok", "alert", "possibly_detained", "confirmed_detained", "storm", "strange"}
 MELLAI_KEYS = ("mellstroy", "меллстрой", "мелл", "бурим", "андрей")
 _login_fail = {}
+_api_captchas = {}
 
 def csrf_token():
     token = session.get("_csrf")
@@ -60,6 +62,8 @@ def security_headers(response):
 
 @app.before_request
 def csrf_guard():
+    if request.path.startswith("/api/v1/"):
+        return
     if request.method == "POST":
         sent = request.form.get("_csrf") or request.headers.get("X-CSRF-Token")
         expected = session.get("_csrf")
@@ -74,6 +78,116 @@ def current_user():
         return con.execute(
             "SELECT id,username,is_admin,created_at FROM users WHERE id=?", (uid,)
         ).fetchone()
+
+def api_token_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+def issue_api_token(user_id):
+    token = secrets.token_urlsafe(36)
+    now = int(time.time())
+    expires = now + 60 * 60 * 24 * 30
+    with db() as con:
+        con.execute("DELETE FROM api_tokens WHERE expires_at < ?", (now,))
+        con.execute(
+            "INSERT INTO api_tokens(user_id,token_hash,created_at,expires_at) VALUES(?,?,?,?)",
+            (user_id, api_token_hash(token), now, expires)
+        )
+    return token, expires
+
+def api_user():
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return None
+    token = header[7:].strip()
+    if not token:
+        return None
+    now = int(time.time())
+    with db() as con:
+        return con.execute(
+            """SELECT u.id,u.username,u.is_admin,u.created_at,t.expires_at
+               FROM api_tokens t JOIN users u ON u.id=t.user_id
+               WHERE t.token_hash=? AND t.expires_at>?""",
+            (api_token_hash(token), now)
+        ).fetchone()
+
+def api_auth_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        u = api_user()
+        if not u:
+            return jsonify(error="unauthorized"), 401
+        return fn(u, *args, **kwargs)
+    return wrapper
+
+def post_to_json(row):
+    image_url = None
+    if row["image_path"]:
+        image_url = PUBLIC_URL + "/static/" + row["image_path"]
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "body": row["body"],
+        "image_url": image_url,
+        "parent_id": row["parent_id"],
+        "views": row["views"],
+        "likes": row["likes_count"],
+        "replies": row["replies_count"],
+        "liked": bool(row["liked"]),
+        "created_at": row["created_at"],
+    }
+
+def api_feed_rows(where_sql="WHERE p.parent_id IS NULL", params=(), viewer_id=-1, limit=60):
+    sql = f"""
+      SELECT p.*,u.username,
+      (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
+      (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+      EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked
+      FROM posts p JOIN users u ON u.id=p.user_id
+      {where_sql}
+      ORDER BY p.created_at DESC LIMIT ?
+    """
+    with db() as con:
+        return con.execute(sql, (viewer_id, *params, limit)).fetchall()
+
+def make_api_captcha():
+    now = int(time.time())
+    for key, value in list(_api_captchas.items()):
+        if value[1] < now:
+            _api_captchas.pop(key, None)
+
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    answer = "".join(secrets.choice(alphabet) for _ in range(5))
+    challenge_id = secrets.token_urlsafe(18)
+    _api_captchas[challenge_id] = (answer, now + 300)
+
+    img = Image.new("RGB", (520, 160), (15, 18, 28))
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
+    except Exception:
+        font = ImageFont.load_default()
+
+    for _ in range(24):
+        x1, y1 = secrets.randbelow(520), secrets.randbelow(160)
+        x2, y2 = secrets.randbelow(520), secrets.randbelow(160)
+        shade = 55 + secrets.randbelow(70)
+        draw.line((x1, y1, x2, y2), fill=(shade, shade, 100 + secrets.randbelow(90)), width=2)
+
+    for i, ch in enumerate(answer):
+        x = 55 + i * 82 + secrets.randbelow(14)
+        y = 26 + secrets.randbelow(24)
+        draw.text((x, y), ch, font=font, fill=(235, 237, 255))
+
+    buf = BytesIO()
+    img.save(buf, "PNG", optimize=True)
+    encoded = base64.b64encode(buf.getvalue()).decode("ascii")
+    return challenge_id, "data:image/png;base64," + encoded
+
+def api_captcha_ok(challenge_id, answer):
+    stored = _api_captchas.pop(challenge_id or "", None)
+    if not stored or stored[1] < int(time.time()):
+        return False
+    return secrets.compare_digest(stored[0].upper(), (answer or "").strip().upper())
 
 def login_required(fn):
     @wraps(fn)
@@ -291,6 +405,185 @@ def webmanifest():
         "theme_color": "#07080c",
         "lang": "ru",
     })
+
+
+@app.get("/api/v1/captcha")
+def api_v1_captcha():
+    challenge_id, image = make_api_captcha()
+    return jsonify(id=challenge_id, image=image, expires_in=300)
+
+@app.post("/api/v1/auth/register")
+def api_v1_register():
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not api_captcha_ok(data.get("captcha_id"), data.get("captcha")):
+        return jsonify(error="captcha", message="Неверная CAPTCHA."), 400
+    if not USERNAME_RE.fullmatch(username):
+        return jsonify(error="username", message="Логин: 3–24 символа, буквы/цифры/._-"), 400
+    if username.lower() == "mellai":
+        return jsonify(error="username", message="Этот юзернейм зарезервирован."), 400
+    if len(password) < 8:
+        return jsonify(error="password", message="Пароль должен быть не короче 8 символов."), 400
+    try:
+        with db() as con:
+            cur = con.execute(
+                "INSERT INTO users(username,password_hash) VALUES(?,?)",
+                (username, generate_password_hash(password, method="scrypt"))
+            )
+            uid = cur.lastrowid
+    except Exception:
+        return jsonify(error="username", message="Такой логин уже занят."), 409
+    token, expires = issue_api_token(uid)
+    return jsonify(token=token, expires_at=expires, user={"id": uid, "username": username})
+
+@app.post("/api/v1/auth/login")
+def api_v1_login():
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not api_captcha_ok(data.get("captcha_id"), data.get("captcha")):
+        return jsonify(error="captcha", message="Неверная CAPTCHA."), 400
+    with db() as con:
+        u = con.execute(
+            "SELECT * FROM users WHERE username=? COLLATE NOCASE", (username,)
+        ).fetchone()
+    if not u or not check_password_hash(u["password_hash"], password):
+        return jsonify(error="credentials", message="Неверный логин или пароль."), 401
+    token, expires = issue_api_token(u["id"])
+    return jsonify(
+        token=token,
+        expires_at=expires,
+        user={"id": u["id"], "username": u["username"], "is_admin": bool(u["is_admin"])}
+    )
+
+@app.post("/api/v1/auth/logout")
+@api_auth_required
+def api_v1_logout(user):
+    header = request.headers.get("Authorization", "")
+    token = header[7:].strip() if header.startswith("Bearer ") else ""
+    if token:
+        with db() as con:
+            con.execute("DELETE FROM api_tokens WHERE token_hash=?", (api_token_hash(token),))
+    return jsonify(ok=True)
+
+@app.get("/api/v1/me")
+@api_auth_required
+def api_v1_me(user):
+    return jsonify(user=dict(user))
+
+@app.get("/api/v1/status")
+def api_v1_status():
+    with db() as con:
+        st = con.execute(
+            "SELECT code,label,detail,location,source_url,updated_at FROM status WHERE id=1"
+        ).fetchone()
+        events = con.execute(
+            """SELECT id,source,title,url,summary,published_at,official,urgent,created_at
+               FROM monitor_events
+               ORDER BY COALESCE(published_at,created_at) DESC LIMIT 40"""
+        ).fetchall()
+    return jsonify(status=dict(st), events=[dict(x) for x in events])
+
+@app.get("/api/v1/feed")
+def api_v1_feed():
+    user = api_user()
+    viewer = user["id"] if user else -1
+    rows = api_feed_rows(viewer_id=viewer, limit=80)
+    return jsonify(posts=[post_to_json(x) for x in rows])
+
+@app.get("/api/v1/posts/<int:post_id>")
+def api_v1_post(post_id):
+    user = api_user()
+    viewer = user["id"] if user else -1
+    with db() as con:
+        con.execute("UPDATE posts SET views=views+1 WHERE id=?", (post_id,))
+        post = con.execute(
+            """SELECT p.*,u.username,
+               (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
+               (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+               EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked
+               FROM posts p JOIN users u ON u.id=p.user_id WHERE p.id=?""",
+            (viewer, post_id)
+        ).fetchone()
+        replies = con.execute(
+            """SELECT p.*,u.username,
+               (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
+               (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+               EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked
+               FROM posts p JOIN users u ON u.id=p.user_id
+               WHERE p.parent_id=? ORDER BY p.created_at ASC""",
+            (viewer, post_id)
+        ).fetchall()
+    if not post:
+        return jsonify(error="not_found"), 404
+    return jsonify(post=post_to_json(post), replies=[post_to_json(x) for x in replies])
+
+@app.post("/api/v1/posts")
+@api_auth_required
+def api_v1_create_post(user):
+    body = (request.form.get("body") or "").strip()
+    parent_raw = (request.form.get("parent_id") or "").strip()
+    parent_id = int(parent_raw) if parent_raw.isdigit() else None
+    try:
+        image_path = save_post_image(request.files.get("image"))
+    except ValueError as e:
+        return jsonify(error="image", message=str(e)), 400
+    if not body and not image_path:
+        return jsonify(error="empty", message="Напиши текст или прикрепи фото."), 400
+    if len(body) > 500:
+        return jsonify(error="body", message="Максимум 500 символов."), 400
+    with db() as con:
+        cur = con.execute(
+            "INSERT INTO posts(user_id,body,image_path,parent_id) VALUES(?,?,?,?)",
+            (user["id"], body, image_path, parent_id)
+        )
+        post_id = cur.lastrowid
+    if body:
+        maybe_mellai(parent_id or post_id, body)
+    return jsonify(ok=True, post_id=post_id), 201
+
+@app.post("/api/v1/posts/<int:post_id>/like")
+@api_auth_required
+def api_v1_like(user, post_id):
+    with db() as con:
+        exists = con.execute(
+            "SELECT 1 FROM likes WHERE user_id=? AND post_id=?", (user["id"], post_id)
+        ).fetchone()
+        if exists:
+            con.execute("DELETE FROM likes WHERE user_id=? AND post_id=?", (user["id"], post_id))
+            liked = False
+        else:
+            con.execute("INSERT OR IGNORE INTO likes(user_id,post_id) VALUES(?,?)", (user["id"], post_id))
+            liked = True
+        count = con.execute("SELECT COUNT(*) c FROM likes WHERE post_id=?", (post_id,)).fetchone()["c"]
+    return jsonify(liked=liked, likes=count)
+
+@app.get("/api/v1/profile/<username>")
+def api_v1_profile(username):
+    viewer = api_user()
+    viewer_id = viewer["id"] if viewer else -1
+    with db() as con:
+        user = con.execute(
+            "SELECT id,username,is_admin,created_at FROM users WHERE username=? COLLATE NOCASE",
+            (username,)
+        ).fetchone()
+    if not user:
+        return jsonify(error="not_found"), 404
+    posts = api_feed_rows("WHERE p.user_id=? AND p.parent_id IS NULL", (user["id"],), viewer_id, 80)
+    return jsonify(user=dict(user), posts=[post_to_json(x) for x in posts])
+
+@app.post("/api/v1/mellai")
+@api_auth_required
+def api_v1_mellai(user):
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify(error="empty", message="Напиши сообщение."), 400
+    if len(message) > 1000:
+        return jsonify(error="too_long", message="Сообщение слишком длинное."), 400
+    reply = mellai_reply("@mellai Mellstroy " + message)
+    return jsonify(reply=reply)
 
 @app.get("/captcha.svg")
 def captcha_svg():
