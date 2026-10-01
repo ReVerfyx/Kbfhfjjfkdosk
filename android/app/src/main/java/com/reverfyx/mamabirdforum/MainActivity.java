@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
         bar.setBackgroundColor(Color.rgb(10,12,18));
 
         TextView title = new TextView(this);
-        title.setText("🕊  МАМА-ПТИЦА · ФОРУМ");
+        title.setText("🕊  СПАСАЕМ МАМУ-ПТИЦУ");
         title.setTextColor(Color.WHITE);
         title.setTextSize(16);
         title.setTypeface(null, 1);
@@ -80,7 +80,7 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " MamaBirdForum/1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " SpasaemMamuPtitsu/1.0");
 
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
