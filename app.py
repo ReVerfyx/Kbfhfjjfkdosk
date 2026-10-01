@@ -1368,7 +1368,12 @@ def admin():
         events = con.execute(
             "SELECT * FROM monitor_events ORDER BY created_at DESC LIMIT 80"
         ).fetchall()
-    return render_template("admin.html", st=st, events=events)
+        verification_requests = con.execute(
+            """SELECT vr.*,u.username FROM verification_requests vr
+               JOIN users u ON u.id=vr.user_id
+               WHERE vr.status='pending' ORDER BY vr.created_at ASC LIMIT 100"""
+        ).fetchall()
+    return render_template("admin.html", st=st, events=events, verification_requests=verification_requests)
 
 
 @app.post("/admin/user/<int:user_id>/verify")
