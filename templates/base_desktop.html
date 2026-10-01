@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a0b0f">
+  <meta name="description" content="Спасаем маму-птицу — монитор публичных источников Mellstroy, стримов и форум.">
+  <link rel="canonical" href="{{canonical_url}}">
+  <title>{% block title %}Спасаем маму-птицу{% endblock %}</title>
+  <link rel="stylesheet" href="/static/core-v4.css">
+  <link rel="stylesheet" href="/static/desktop-v4.css">
+</head>
+<body class="v4 desktop {% if site_status.code in ['possibly_detained','confirmed_detained'] %}red-state{% endif %}">
+<header class="desktop-header">
+  <div class="desktop-header-inner">
+    <a class="v4-brand" href="/"><span class="v4-logo">М</span><span><b>СПАСАЕМ МАМУ-ПТИЦУ</b><small>mellstroy.work.gd</small></span></a>
+    <nav class="v4-nav">
+      <a href="/">Главная</a><a href="/status">Статус</a><a href="/streams">Стримы</a><a href="/forum">Форум</a><a href="/u/mellai">@mellai</a>
+    </nav>
+    <div class="v4-account">
+      {% if me %}<a href="/u/{{me.username}}">@{{me.username}}</a>{% else %}<a href="/login">Войти</a><a class="v4-primary-sm" href="/register">Регистрация</a>{% endif %}
+    </div>
+  </div>
+</header>
+{% if site_status.code in ['possibly_detained','confirmed_detained'] %}
+<div id="globalAlarm" class="v4-alarm"><span class="v4-pulse"></span><b>{{site_status.label}}</b><span>Первичный тревожный сигнал. Проверяем подтверждение.</span></div>
+{% elif site_status.code == 'alert' %}
+<div class="v4-warning"><b>{{site_status.label}}</b><span>Сирена не включается до первичного подтверждения.</span></div>
+{% endif %}
+<main class="v4-main">
+{% with ms=get_flashed_messages() %}{% for m in ms %}<div class="v4-flash">{{m}}</div>{% endfor %}{% endwith %}
+{% block content %}{% endblock %}
+</main>
+<footer class="v4-footer"><b>Спасаем маму-птицу</b><span>Неофициальный монитор публичных источников. Точные адреса и частные данные не отслеживаются.</span><a href="?view=mobile">Мобильная версия</a></footer>
+<script src="/static/site-v4.js"></script>
+</body></html>
