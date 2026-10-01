@@ -15,6 +15,13 @@
   <link rel="manifest" href="/site.webmanifest">
   <title>{% block title %}Спасаем маму-птицу{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+  {% if 'SpasaemMamuPtitsu' in request.headers.get('User-Agent','') %}
+  <style>
+    nav{display:none!important}
+    main{padding-top:10px!important}
+    footer{padding-bottom:18px!important}
+  </style>
+  {% endif %}
 </head>
 <body class="{% if site_status and site_status.code in ['alert','possibly_detained','confirmed_detained','storm','strange'] %}alarm-active alarm-{{site_status.code}}{% else %}calm-mode{% endif %}">
 <div class="ambient a1"></div><div class="ambient a2"></div>
