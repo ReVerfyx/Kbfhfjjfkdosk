@@ -10,7 +10,7 @@
 </head>
 <body class="v4 mobile {% if site_status.code in ['possibly_detained','confirmed_detained'] %}red-state{% endif %}">
 <header class="mobile-header">
-  <a class="mobile-brand" href="/"><span class="v4-logo">М</span><span><b>Мама-птица</b><small>mellstroy.work.gd</small></span></a>
+  <a class="mobile-brand" href="/"><span class="v4-logo">М</span><span><b>Мама-птица</b><small>публичный монитор</small></span></a>
   <a class="mobile-profile" href="{% if me %}/u/{{me.username}}{% else %}/login{% endif %}">{% if me %}@{{me.username}}{% else %}Войти{% endif %}</a>
 </header>
 {% if site_status.code in ['possibly_detained','confirmed_detained'] %}
