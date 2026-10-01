@@ -10,7 +10,7 @@
     <input type="hidden" name="parent_id" value="{{post.id}}">
     <textarea data-autogrow name="body" maxlength="500" placeholder="Написать ответ…"></textarea>
     <div class="composebottom">
-      <label class="uploadbtn">▧ Фото<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
+      <span><label class="uploadbtn">Фото<input type="file" name="image" accept="image/*"></label> <label class="uploadbtn">Видео<input type="file" name="video" accept="video/*"></label></span>
       <button class="publish">Ответить</button>
     </div>
   </form>
