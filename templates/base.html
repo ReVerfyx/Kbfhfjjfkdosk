@@ -7,14 +7,22 @@
   <title>{% block title %}МАМА-ПТИЦА{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
 </head>
-<body>
+<body class="{% if site_status and site_status.code in ['alert','possibly_detained','confirmed_detained','storm','strange'] %}alarm-active alarm-{{site_status.code}}{% else %}calm-mode{% endif %}">
 <div class="ambient a1"></div><div class="ambient a2"></div>
+{% if site_status and site_status.code in ['alert','possibly_detained','confirmed_detained','storm','strange'] %}
+<div id="globalAlarm" class="global-alarm" data-code="{{site_status.code}}">
+  <span class="alarm-lamp"></span>
+  <b>ТРЕВОЖНЫЙ РЕЖИМ</b>
+  <span>{{site_status.label}}</span>
+</div>
+{% endif %}
 <nav>
   <a class="brand" href="/"><span class="brandmark">М</span><span>МАМА-ПТИЦА</span></a>
   <div class="navlinks">
-    <a href="/#status">Статус</a>
-    <a href="/#forum">Форум</a>
-    <a href="/api/status">API</a>
+    <a href="/">Главная</a>
+    <a href="/status">Статус</a>
+    <a href="/forum">Форум</a>
+    <a href="/u/mellai">@mellai</a>
     {% if me %}
       <a href="/u/{{me.username}}">@{{me.username}}</a>
       {% if me.is_admin %}<a href="/admin">Админ</a>{% endif %}
@@ -40,5 +48,6 @@ document.querySelectorAll('[data-autogrow]').forEach(t=>{
   t.addEventListener('input',f); f();
 });
 </script>
+<script src="{{ url_for('static',filename='site.js') }}"></script>
 </body>
 </html>
