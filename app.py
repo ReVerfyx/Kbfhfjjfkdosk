@@ -30,7 +30,6 @@ USERNAME_RE = re.compile(r"^[A-Za-zА-Яа-я0-9_.-]{3,24}$")
 ALLOWED_STATUS = {"checking", "ok", "alert", "possibly_detained", "confirmed_detained", "storm", "strange"}
 MELLAI_KEYS = ("mellstroy", "меллстрой", "мелл", "бурим", "андрей")
 _login_fail = {}
-_api_captchas = {}
 
 def csrf_token():
     token = session.get("_csrf")
@@ -151,14 +150,17 @@ def api_feed_rows(where_sql="WHERE p.parent_id IS NULL", params=(), viewer_id=-1
 
 def make_api_captcha():
     now = int(time.time())
-    for key, value in list(_api_captchas.items()):
-        if value[1] < now:
-            _api_captchas.pop(key, None)
-
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     answer = "".join(secrets.choice(alphabet) for _ in range(5))
     challenge_id = secrets.token_urlsafe(18)
-    _api_captchas[challenge_id] = (answer, now + 300)
+    answer_hash = hashlib.sha256(answer.encode("utf-8")).hexdigest()
+
+    with db() as con:
+        con.execute("DELETE FROM api_captchas WHERE expires_at < ?", (now,))
+        con.execute(
+            "INSERT INTO api_captchas(id,answer_hash,expires_at) VALUES(?,?,?)",
+            (challenge_id, answer_hash, now + 300)
+        )
 
     img = Image.new("RGB", (520, 160), (15, 18, 28))
     draw = ImageDraw.Draw(img)
@@ -184,10 +186,18 @@ def make_api_captcha():
     return challenge_id, "data:image/png;base64," + encoded
 
 def api_captcha_ok(challenge_id, answer):
-    stored = _api_captchas.pop(challenge_id or "", None)
-    if not stored or stored[1] < int(time.time()):
+    challenge_id = challenge_id or ""
+    now = int(time.time())
+    with db() as con:
+        stored = con.execute(
+            "SELECT answer_hash,expires_at FROM api_captchas WHERE id=?",
+            (challenge_id,)
+        ).fetchone()
+        con.execute("DELETE FROM api_captchas WHERE id=?", (challenge_id,))
+    if not stored or stored["expires_at"] < now:
         return False
-    return secrets.compare_digest(stored[0].upper(), (answer or "").strip().upper())
+    provided_hash = hashlib.sha256((answer or "").strip().upper().encode("utf-8")).hexdigest()
+    return secrets.compare_digest(stored["answer_hash"], provided_hash)
 
 def login_required(fn):
     @wraps(fn)
