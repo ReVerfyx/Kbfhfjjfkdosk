@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from db import db, init_db
 
 APP_DIR = Path(__file__).resolve().parent
+PUBLIC_URL = os.getenv("MW_PUBLIC_URL", "https://mellstroy.work.gd").rstrip("/")
 UPLOAD_DIR = APP_DIR / "static" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -40,7 +41,22 @@ def csrf_token():
 def globals_for_templates():
     with db() as con:
         site_status = con.execute("SELECT * FROM status WHERE id=1").fetchone()
-    return {"me": current_user(), "csrf_token": csrf_token, "site_status": site_status}
+    canonical = PUBLIC_URL + (request.path if request.path.startswith("/") else "/" + request.path)
+    return {
+        "me": current_user(),
+        "csrf_token": csrf_token,
+        "site_status": site_status,
+        "public_url": PUBLIC_URL,
+        "canonical_url": canonical,
+    }
+
+@app.after_request
+def security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+    return response
 
 @app.before_request
 def csrf_guard():
@@ -243,6 +259,38 @@ def api_status():
             "FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 30"
         ).fetchall()
     return jsonify(status=dict(st), events=[dict(x) for x in ev])
+
+@app.get("/health")
+def health():
+    return jsonify(ok=True, site="Спасаем маму-птицу", url=PUBLIC_URL)
+
+@app.get("/robots.txt")
+def robots():
+    body = "User-agent: *\nAllow: /\nSitemap: " + PUBLIC_URL + "/sitemap.xml\n"
+    return Response(body, mimetype="text/plain")
+
+@app.get("/sitemap.xml")
+def sitemap():
+    urls = ["/", "/status", "/forum", "/u/mellai"]
+    body = ['<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for path in urls:
+        body.append(f"<url><loc>{PUBLIC_URL}{path}</loc></url>")
+    body.append("</urlset>")
+    return Response("\n".join(body), mimetype="application/xml")
+
+@app.get("/site.webmanifest")
+def webmanifest():
+    return jsonify({
+        "name": "Спасаем маму-птицу",
+        "short_name": "Мама-птица",
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#07080c",
+        "theme_color": "#07080c",
+        "lang": "ru",
+    })
 
 @app.get("/captcha.svg")
 def captcha_svg():
