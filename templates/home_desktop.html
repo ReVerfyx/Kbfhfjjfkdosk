@@ -1,0 +1,22 @@
+{% extends "base_desktop.html" %}{% block title %}Спасаем маму-птицу{% endblock %}{% block content %}
+<section class="desk-hero status-{{st.code}}">
+  <div class="desk-hero-copy"><div class="v4-kicker">PUBLIC STATUS MONITOR · 5 MIN</div><h1>СПАСАЕМ<br><em>МАМУ-ПТИЦУ</em></h1><p>Статус Mellstroy строится по первичным публичным источникам. Новости используются как подтверждение, а не как автоматический повод для красной тревоги.</p>
+    <div class="hero-status-v4"><span class="status-dot"></span><div><b>{{st.label}}</b><small>{{st.detail}}</small></div></div>
+    <div class="v4-buttons"><a class="v4-primary" href="/status">Подробный статус</a><a class="v4-secondary" href="/streams">Монитор стримов</a></div>
+  </div>
+</section>
+<section class="desk-metrics">
+  <div><small>Проверка источников</small><b>каждые 5 минут</b></div>
+  <div><small>Локация</small><b>{{st.location}}</b></div>
+  <div><small>Стрим</small><b>{% if stream.is_live %}В эфире{% else %}Оффлайн{% endif %}</b></div>
+  <div><small>Последнее обновление</small><b>{{st.updated_at}}</b></div>
+</section>
+<section class="desk-grid">
+  <div class="v4-panel span2"><div class="v4-section-head"><div><small>ПЕРВИЧНЫЕ ИСТОЧНИКИ + СМИ</small><h2>Последние сигналы</h2></div><a href="/status">Вся хронология</a></div>
+    <div class="signal-v4-list">{% for e in events[:8] %}<a href="{{e.url}}" target="_blank" rel="noopener" class="signal-v4 {% if e.urgent %}urgent{% endif %}"><span></span><div><b>{{e.title}}</b><small>{{e.source}} · {{e.published_at or e.created_at}}</small>{% if e.summary %}<p>{{e.summary[:170]}}{% if e.summary|length>170 %}…{% endif %}</p>{% endif %}</div></a>{% endfor %}</div>
+  </div>
+  <aside class="v4-panel"><div class="v4-section-head"><div><small>STREAM WATCH</small><h2>Стримы</h2></div></div><div class="stream-card {% if stream.is_live %}live{% endif %}"><b>{% if stream.is_live %}Сейчас в эфире{% else %}Сейчас оффлайн{% endif %}</b><p>{{stream.title or 'Последний эфир отслеживается автоматически'}}</p><small>{{stream.source or 'Telegram @mellstroystream + индекс стримов'}}</small></div><a class="v4-wide-link" href="/streams">Открыть монитор стримов →</a></aside>
+</section>
+<section class="v4-section-head forum-head"><div><small>COMMUNITY</small><h2>Форум</h2></div><a href="/forum">Открыть весь форум</a></section>
+<div class="desktop-feed">{% for p in posts %}{% include "_post.html" %}{% else %}<div class="v4-empty">Пока нет публикаций.</div>{% endfor %}</div>
+{% endblock %}
