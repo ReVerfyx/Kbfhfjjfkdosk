@@ -351,7 +351,7 @@ def create_post():
         maybe_mellai(parent or post_id, body)
     if parent:
         return redirect(url_for("post_detail", post_id=parent))
-    return redirect(url_for("home") + "#forum")
+    return redirect(url_for("forum"))
 
 @app.get("/forum")
 def forum():
