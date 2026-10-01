@@ -178,6 +178,7 @@ EOF
 fi
 rm -f /etc/nginx/sites-enabled/default
 ln -sf /etc/nginx/sites-available/mama-bird /etc/nginx/sites-enabled/mama-bird
+nginx -t
 
 systemctl daemon-reload
 systemctl enable --now mama-bird mama-bird-monitor.timer nginx
