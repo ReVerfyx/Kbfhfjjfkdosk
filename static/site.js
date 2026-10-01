@@ -2,12 +2,10 @@
   const alarm = document.getElementById('globalAlarm');
   if (!alarm) return;
 
-  let started = false;
-  let ctx, osc, gain, timer;
+  let ctx = null, osc = null, gain = null, timer = null, stopped = false;
 
-  function startAlarm() {
-    if (started) return;
-    started = true;
+  function buildAlarm() {
+    if (ctx || stopped) return;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -20,6 +18,7 @@
       osc.start();
       let high = false;
       const tick = () => {
+        if (!ctx || stopped) return;
         high = !high;
         osc.frequency.setValueAtTime(high ? 920 : 610, ctx.currentTime);
       };
@@ -29,15 +28,24 @@
     } catch (_) {}
   }
 
+  function tryStart() {
+    buildAlarm();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  }
+
   function stopAlarm() {
+    if (stopped) return;
+    stopped = true;
     try { clearInterval(timer); } catch (_) {}
     try { osc && osc.stop(); } catch (_) {}
     try { ctx && ctx.close(); } catch (_) {}
   }
 
-  // Browsers may block autoplay audio. We try immediately and retry on the first gesture.
-  startAlarm();
+  // Try immediately. If autoplay audio is blocked, the first tap/key resumes it.
+  tryStart();
   ['pointerdown','touchstart','keydown'].forEach(ev =>
-    document.addEventListener(ev, startAlarm, { once: true, passive: true })
+    document.addEventListener(ev, tryStart, { passive: true })
   );
 })();
