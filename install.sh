@@ -6,10 +6,10 @@ APP=/opt/mama-bird
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip nginx openssl curl wget
+DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip nginx openssl curl wget ffmpeg
 
 mkdir -p "$APP/data" "$APP/static/uploads"
-cp "$SRC/app.py" "$SRC/db.py" "$SRC/monitor.py" "$SRC/sources.json" "$SRC/requirements.txt" "$APP/"
+cp "$SRC/app.py" "$SRC/db.py" "$SRC/monitor.py" "$SRC/moderation.py" "$SRC/sources.json" "$SRC/requirements.txt" "$APP/"
 rm -rf "$APP/templates"
 cp -r "$SRC/templates" "$APP/templates"
 mkdir -p "$APP/static"
@@ -19,6 +19,8 @@ mkdir -p "$APP/static/uploads"
 python3 -m venv "$APP/venv"
 "$APP/venv/bin/pip" install --upgrade pip
 "$APP/venv/bin/pip" install -r "$APP/requirements.txt"
+# AI media moderation is optional at runtime, but install it when possible.
+"$APP/venv/bin/pip" install "nudenet>=3.4" "onnxruntime>=1.19" || true
 
 # Локальный ИИ для @mellai. Qwen 2.5 1.5B — компромисс между качеством и нагрузкой.
 if ! command -v ollama >/dev/null 2>&1; then
@@ -41,6 +43,15 @@ MW_HTTPS=0
 MW_OLLAMA_URL=http://127.0.0.1:11434
 MW_MELLAI_MODEL=qwen2.5:1.5b
 MW_PUBLIC_URL=https://mellstroy.work.gd
+MW_AI_TEXT_MODERATION=1
+MW_AI_MEDIA_MODERATION=1
+MW_MODERATION_MODEL=qwen2.5:1.5b
+MW_NSFW_THRESHOLD=0.58
+MW_TON_WALLET=
+MW_LOLZ_API_BASE=
+MW_LOLZ_API_TOKEN=
+MW_LOLZ_MERCHANT_ID=
+MW_LOLZ_WEBHOOK_SECRET=
 EOF
 else
   if grep -q '^MW_MELLAI_MODEL=' /etc/mama-bird.env; then
@@ -48,6 +59,10 @@ else
   else
     echo 'MW_MELLAI_MODEL=qwen2.5:1.5b' >> /etc/mama-bird.env
   fi
+  for row in     'MW_AI_TEXT_MODERATION=1'     'MW_AI_MEDIA_MODERATION=1'     'MW_MODERATION_MODEL=qwen2.5:1.5b'     'MW_NSFW_THRESHOLD=0.58'     'MW_TON_WALLET='     'MW_LOLZ_API_BASE='     'MW_LOLZ_API_TOKEN='     'MW_LOLZ_MERCHANT_ID='     'MW_LOLZ_WEBHOOK_SECRET='; do
+      key="${row%%=*}"
+      grep -q "^${key}=" /etc/mama-bird.env || echo "$row" >> /etc/mama-bird.env
+  done
   if grep -q '^MW_PUBLIC_URL=' /etc/mama-bird.env; then
     sed -i 's#^MW_PUBLIC_URL=.*#MW_PUBLIC_URL=https://mellstroy.work.gd#' /etc/mama-bird.env
   else
@@ -107,7 +122,7 @@ server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name mellstroy.work.gd www.mellstroy.work.gd;
-    client_max_body_size 6m;
+    client_max_body_size 80m;
 
     location /static/uploads/ {
         alias /opt/mama-bird/static/uploads/;
@@ -137,7 +152,6 @@ IP="$(hostname -I | awk '{print $1}')"
 echo
 echo "============================================"
 echo "Сайт: https://mellstroy.work.gd/"
-echo "IP: http://$IP/"
 echo "Админ: admin"
 if [ -n "$ADMIN_PASS" ]; then
   echo "Пароль: $ADMIN_PASS"
@@ -145,7 +159,12 @@ if [ -n "$ADMIN_PASS" ]; then
 else
   echo "Пароль администратора сохранён прежний"
 fi
-echo "@mellai: Qwen2.5 1.5B через Ollama"
+echo "Настройки поддержки: /etc/mama-bird.env"
+echo "  MW_TON_WALLET=..."
+echo "  MW_LOLZ_API_BASE=..."
+echo "  MW_LOLZ_API_TOKEN=..."
+echo "  MW_LOLZ_MERCHANT_ID=..."
+echo "  MW_LOLZ_WEBHOOK_SECRET=..."
 echo
 echo "Источники: $APP/sources.json"
 echo "Сайт: journalctl -u mama-bird -f"
