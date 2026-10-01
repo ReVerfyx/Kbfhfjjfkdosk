@@ -490,11 +490,13 @@ private fun AuthScreen(vm: MainViewModel, allowGuest: Boolean, onClose: () -> Un
                         AuthTab(
                             text = "Вход",
                             selected = !register,
+                            modifier = Modifier.weight(1f),
                             onClick = { register = false }
                         )
                         AuthTab(
                             text = "Регистрация",
                             selected = register,
+                            modifier = Modifier.weight(1f),
                             onClick = { register = true }
                         )
                     }
@@ -604,14 +606,18 @@ private fun AuthScreen(vm: MainViewModel, allowGuest: Boolean, onClose: () -> Un
 }
 
 @Composable
-private fun AuthTab(text: String, selected: Boolean, onClick: () -> Unit) {
+private fun AuthTab(
+    text: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     val color by animateColorAsState(
         if (selected) Accent else Surface2,
         label = "authTab"
     )
     Box(
-        Modifier
-            .weight(1f)
+        modifier
             .background(color, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
