@@ -1,110 +1,114 @@
 {% extends "base.html" %}
+{% block title %}Спасаем маму-птицу{% endblock %}
 {% block content %}
-<section id="status" class="statushero status-{{st.code}}">
-  {% if st.code == 'confirmed_detained' %}
-  <div class="danger-wall" aria-hidden="true">
-    <video autoplay muted loop playsinline src="/static/video/defense-1.mp4"></video>
-    <video autoplay muted loop playsinline src="/static/video/defense-2.mp4"></video>
-    <video autoplay muted loop playsinline src="/static/video/defense-3.mp4"></video>
-    <video autoplay muted loop playsinline src="/static/video/defense-4.mp4"></video>
-  </div>
-  <div class="danger-banner">ТРЕВОГА · ЗАДЕРЖАНИЕ ПОДТВЕРЖДЕНО<small>На фоне — присланные футажи. Звук тревоги включается при первом взаимодействии с сайтом.</small></div>
-  {% endif %}
-  <div class="statusshade"></div>
-  <div class="heroinner">
-    <div class="eyebrow">LIVE STATUS · PUBLIC SOURCES</div>
-    <h1>СПАСАЕМ<br><span>МАМУ-ПТИЦУ</span></h1>
-    <p class="lead">Новости, публичные посты, стрим‑активность и сообщество в одном месте.</p>
-    <div class="statuscard">
-      <div class="statusdot"></div>
-      <div>
-        <div class="statuslabel">{{st.label}}</div>
-        <div class="statusdetail">{{st.detail}}</div>
-      </div>
+<section class="dashboard-hero hero-{{st.code}}">
+  <div class="hero-overlay"></div>
+  <div class="hero-copy">
+    <div class="live-kicker"><span></span> LIVE PUBLIC MONITOR</div>
+    <h1>СПАСАЕМ<br><em>МАМУ-ПТИЦУ</em></h1>
+    <p>Статус Mellstroy, публичные сигналы, стрим-активность и сообщество — без выдумок и без точной геолокации.</p>
+    <div class="hero-status">
+      <i></i>
+      <div><b>{{st.label}}</b><span>{{st.detail}}</span></div>
     </div>
-    <div class="herochips">
-      <span>📍 {{st.location}}</span>
-      <span>↻ {{st.updated_at}}</span>
-      {% if st.source_url %}<a href="{{st.source_url}}" target="_blank" rel="noopener">Источник ↗</a>{% endif %}
+    <div class="hero-actions">
+      <a class="cta primary" href="/status">Открыть статус</a>
+      <a class="cta" href="/forum">Перейти на форум</a>
     </div>
   </div>
+  <div class="hero-portrait"></div>
 </section>
 
-<section class="layout">
-  <div class="feedcol" id="forum">
-    <div class="feedhead">
-      <div><span class="eyebrow">COMMUNITY</span><h2>Лента</h2></div>
-      <a class="ghost" href="#composer">Новый пост</a>
-    </div>
+<section class="dashboard-grid">
+  <article class="metric-card">
+    <span class="metric-icon">◉</span>
+    <div><small>Последнее обновление</small><b>{{st.updated_at}}</b></div>
+  </article>
+  <article class="metric-card">
+    <span class="metric-icon">⌖</span>
+    <div><small>Публично сообщаемое место</small><b>{{st.location}}</b></div>
+  </article>
+  <article class="metric-card">
+    <span class="metric-icon">⚠</span>
+    <div><small>Тревожных сигналов</small><b>{{ events|selectattr('urgent')|list|length }}</b></div>
+  </article>
+  <article class="metric-card">
+    <span class="metric-icon">↗</span>
+    <div><small>Мониторинг</small><b>24/7 · каждые 5 мин</b></div>
+  </article>
+</section>
 
-    {% if me %}
-    <form id="composer" class="composer" action="/post" method="post" enctype="multipart/form-data">
-      <input type="hidden" name="_csrf" value="{{csrf_token()}}">
-      <div class="avatar big">{{me.username[:1]|upper}}</div>
-      <div class="composebody">
-        <textarea data-autogrow name="body" maxlength="500" placeholder="Что происходит?"></textarea>
-        <div class="composebottom">
-          <label class="uploadbtn">▧ Фото<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
-          <span class="limit">до 500 символов</span>
-          <button class="publish">Опубликовать</button>
-        </div>
-      </div>
-    </form>
-    {% else %}
-    <div class="loginbanner"><div><b>Присоединяйся к форуму</b><span>Пиши посты, прикрепляй фото и отвечай другим.</span></div><a href="/register">Создать аккаунт</a></div>
-    {% endif %}
+<section class="section-head">
+  <div><span class="eyebrow">STATUS MODES</span><h2>Текущий режим</h2></div>
+  <a href="/status">Подробнее →</a>
+</section>
 
-    <div class="postlist">
-      {% for p in posts %}{% include "_post.html" %}{% else %}
-      <div class="empty">Пока тихо. Здесь появятся первые публикации.</div>
-      {% endfor %}
+<section class="state-grid">
+  <article class="state-card good {% if st.code=='ok' %}active{% endif %}">
+    <div class="state-photo good-photo"></div>
+    <div class="state-copy"><span class="state-dot"></span><div><b>Всё в порядке</b><small>Есть свежая активность и нет тревожных подтверждений.</small></div></div>
+  </article>
+  <article class="state-card unknown {% if st.code in ['checking','strange'] %}active{% endif %}">
+    <div class="state-photo unknown-photo"></div>
+    <div class="state-copy"><span class="state-dot"></span><div><b>Нет информации</b><small>Новых подтверждённых данных пока недостаточно.</small></div></div>
+  </article>
+  <article class="state-card danger {% if st.code in ['alert','possibly_detained','confirmed_detained','storm'] %}active{% endif %}">
+    <div class="state-photo danger-photo"></div>
+    <div class="state-copy"><span class="state-dot"></span><div><b>Тревожный режим</b><small>Есть публикации о возможном задержании или другое серьёзное событие.</small></div></div>
+  </article>
+</section>
+
+<section class="dashboard-columns">
+  <div class="panel monitor-panel">
+    <div class="panel-head"><div><span class="eyebrow">OPEN SOURCES</span><h2>Последние сигналы</h2></div><span class="live-chip">LIVE</span></div>
+    <div class="signal-list">
+      {% for e in events %}
+      <a class="signal-line {% if e.urgent %}urgent{% endif %}" href="{{e.url}}" target="_blank" rel="noopener">
+        <span class="signal-mark"></span>
+        <div><b>{{e.title}}</b><small>{{e.source}}{% if e.official %} · официальный источник{% endif %}</small></div>
+        <i>↗</i>
+      </a>
+      {% else %}<div class="empty">Монитор ещё собирает данные.</div>{% endfor %}
     </div>
   </div>
 
-  <aside class="sidecol">
-    <div class="sidecard livecard">
-      <div class="sidehead"><h3>Мониторинг</h3><span class="livebadge">LIVE</span></div>
-      <p>Проверяет публичные новости, официальные страницы, Telegram и другие подключённые источники.</p>
-      <a href="/api/status">Открыть JSON API →</a>
+  <aside class="panel mellai-panel">
+    <span class="eyebrow">AI ASSISTANT</span>
+    <div class="mellai-title"><div class="bot-orb">✦</div><div><h2>@mellai</h2><small>Только вопросы о Mellstroy</small></div></div>
+    <p>Спроси про статус, последние публикации или стримы. Бот использует данные этого мониторинга и помечает неподтверждённые сведения.</p>
+    <div class="chat-demo">
+      <div class="q">Где сейчас Mellstroy?</div>
+      <div class="a">Показываю только публично сообщаемый общий регион. Точные адреса сайт не отслеживает.</div>
     </div>
-    <div class="sidecard">
-      <div class="sidehead"><h3>Последние сигналы</h3><span>{{events|length}}</span></div>
-      <div class="signals">
-      {% for e in events %}
-        <a href="{{e.url}}" target="_blank" rel="noopener" class="signal {% if e.urgent %}urgent{% endif %}">
-          <b>{{e.title}}</b>
-          <span>{{e.source}}{% if e.official %} · официальный{% endif %}</span>
-        </a>
-      {% else %}<div class="empty mini">Монитор собирает данные.</div>{% endfor %}
-      </div>
-    </div>
-    <div class="sidecard mosaic">
-      <div class="m m1"></div><div class="m m2"></div><div class="m m3"></div>
-      <div class="mcaption">Архив настроений</div>
-    </div>
+    <a class="cta full" href="/u/mellai">Открыть @mellai</a>
   </aside>
 </section>
-{% endblock %}
 
-{% if st.code == 'confirmed_detained' %}
-<script>
-document.body.classList.add('detained-alert');
-(function(){
-  let started=false;
-  function alarm(){
-    if(started)return; started=true;
-    try{
-      const AC=window.AudioContext||window.webkitAudioContext;
-      if(!AC)return;
-      const ctx=new AC(), osc=ctx.createOscillator(), gain=ctx.createGain();
-      osc.type='sawtooth'; gain.gain.value=.024; osc.connect(gain).connect(ctx.destination); osc.start();
-      let hi=false;
-      const t=setInterval(()=>{hi=!hi;osc.frequency.setValueAtTime(hi?900:610,ctx.currentTime)},320);
-      setTimeout(()=>{clearInterval(t);try{osc.stop()}catch(e){};ctx.close()},10000);
-    }catch(e){}
-  }
-  alarm();
-  ['pointerdown','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,alarm,{once:true}));
-})();
-</script>
+<section class="section-head">
+  <div><span class="eyebrow">COMMUNITY</span><h2>Последнее с форума</h2></div>
+  <a href="/forum">Весь форум →</a>
+</section>
+<section class="panel home-forum">
+  {% for p in posts %}{% include "_post.html" %}{% else %}<div class="empty">Пока нет публикаций.</div>{% endfor %}
+</section>
+
+<section class="section-head">
+  <div><span class="eyebrow">ARCHIVE</span><h2>Галерея состояний</h2></div>
+</section>
+<section class="gallery-strip">
+  <div class="gallery-shot g1"></div>
+  <div class="gallery-shot g2"></div>
+  <div class="gallery-shot g3"></div>
+  <div class="gallery-shot g4"></div>
+  <div class="gallery-shot g5"></div>
+</section>
+
+{% if st.code in ['storm','confirmed_detained'] %}
+<section class="emergency-section">
+  <div class="emergency-head"><b>КРАСНЫЙ РЕЖИМ</b><span>Присланные футажи тревожного события</span></div>
+  <div class="emergency-videos">
+    {% for i in range(1,5) %}<video autoplay muted loop playsinline src="/static/video/defense-{{i}}.mp4"></video>{% endfor %}
+  </div>
+</section>
 {% endif %}
+{% endblock %}
