@@ -397,7 +397,7 @@ def support_public_config():
 
 def feed_query(where="", params=()):
     sql = f"""
-      SELECT p.*,u.username,
+      SELECT p.*,u.username,u.display_name,u.avatar_path,u.verified,u.sponsor_badge,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
       (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
       (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
@@ -505,7 +505,7 @@ def home():
             "SELECT * FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 8"
         ).fetchall()
         posts = con.execute("""
-          SELECT p.*,u.username,
+          SELECT p.*,u.username,u.display_name,u.avatar_path,u.verified,u.sponsor_badge,
           (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
           (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
           (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
