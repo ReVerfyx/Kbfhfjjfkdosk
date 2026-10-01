@@ -71,6 +71,12 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
 
+        CREATE TABLE IF NOT EXISTS api_captchas(
+          id TEXT PRIMARY KEY,
+          answer_hash TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS status(
           id INTEGER PRIMARY KEY CHECK(id=1),
           code TEXT NOT NULL DEFAULT 'checking',
