@@ -39,6 +39,20 @@ def csrf_token():
     return token
 
 @app.context_processor
+def is_mobile_request():
+    forced = request.args.get("view")
+    if forced == "mobile":
+        return True
+    if forced == "desktop":
+        return False
+    ua = (request.headers.get("User-Agent") or "").lower()
+    return any(x in ua for x in ("android", "iphone", "ipod", "mobile"))
+
+def device_template(name):
+    suffix = "mobile" if is_mobile_request() else "desktop"
+    return f"{name}_{suffix}.html"
+
+@app.context_processor
 def globals_for_templates():
     with db() as con:
         site_status = con.execute("SELECT * FROM status WHERE id=1").fetchone()
@@ -49,6 +63,8 @@ def globals_for_templates():
         "site_status": site_status,
         "public_url": PUBLIC_URL,
         "canonical_url": canonical,
+        "is_mobile": is_mobile_request(),
+        "base_template": "base_mobile.html" if is_mobile_request() else "base_desktop.html",
     }
 
 @app.after_request
@@ -122,6 +138,7 @@ def post_to_json(row):
     image_url = None
     if row["image_path"]:
         image_url = PUBLIC_URL + "/static/" + row["image_path"]
+    keys = set(row.keys())
     return {
         "id": row["id"],
         "username": row["username"],
@@ -131,7 +148,9 @@ def post_to_json(row):
         "views": row["views"],
         "likes": row["likes_count"],
         "replies": row["replies_count"],
-        "liked": bool(row["liked"]),
+        "reposts": row["reposts_count"] if "reposts_count" in keys else 0,
+        "liked": bool(row["liked"]) if "liked" in keys else False,
+        "reposted": bool(row["reposted"]) if "reposted" in keys else False,
         "created_at": row["created_at"],
     }
 
@@ -140,13 +159,15 @@ def api_feed_rows(where_sql="WHERE p.parent_id IS NULL", params=(), viewer_id=-1
       SELECT p.*,u.username,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
       (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
-      EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked
+      (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count,
+      EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked,
+      EXISTS(SELECT 1 FROM reposts rp2 WHERE rp2.post_id=p.id AND rp2.user_id=?) reposted
       FROM posts p JOIN users u ON u.id=p.user_id
       {where_sql}
       ORDER BY p.created_at DESC LIMIT ?
     """
     with db() as con:
-        return con.execute(sql, (viewer_id, *params, limit)).fetchall()
+        return con.execute(sql, (viewer_id, viewer_id, *params, limit)).fetchall()
 
 def make_api_captcha():
     now = int(time.time())
@@ -252,10 +273,14 @@ def feed_query(where="", params=()):
     sql = f"""
       SELECT p.*,u.username,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
-      (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count
+      (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
+      (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
       FROM posts p JOIN users u ON u.id=p.user_id
       {where}
-      ORDER BY p.created_at DESC
+      ORDER BY COALESCE(
+        (SELECT MAX(rp2.created_at) FROM reposts rp2 WHERE rp2.post_id=p.id),
+        p.created_at
+      ) DESC
     """
     with db() as con:
         return con.execute(sql, params).fetchall()
@@ -361,7 +386,9 @@ def home():
           WHERE p.parent_id IS NULL
           ORDER BY p.created_at DESC LIMIT 4
         """).fetchall()
-    return render_template("home.html", st=st, events=events, posts=posts)
+    with db() as con:
+        stream = con.execute("SELECT * FROM stream_status WHERE id=1").fetchone()
+    return render_template(device_template("home"), st=st, events=events, posts=posts, stream=stream)
 
 @app.get("/status")
 def status_page():
@@ -370,7 +397,7 @@ def status_page():
         events = con.execute(
             "SELECT * FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 40"
         ).fetchall()
-    return render_template("status.html", st=st, events=events)
+    return render_template(device_template("status"), st=st, events=events)
 
 @app.get("/api/status")
 def api_status():
@@ -512,18 +539,22 @@ def api_v1_post(post_id):
             """SELECT p.*,u.username,
                (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
                (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
-               EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked
+               (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count,
+               EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked,
+               EXISTS(SELECT 1 FROM reposts rp2 WHERE rp2.post_id=p.id AND rp2.user_id=?) reposted
                FROM posts p JOIN users u ON u.id=p.user_id WHERE p.id=?""",
-            (viewer, post_id)
+            (viewer, viewer, post_id)
         ).fetchone()
         replies = con.execute(
             """SELECT p.*,u.username,
                (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
                (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
-               EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked
+               (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count,
+               EXISTS(SELECT 1 FROM likes l2 WHERE l2.post_id=p.id AND l2.user_id=?) liked,
+               EXISTS(SELECT 1 FROM reposts rp2 WHERE rp2.post_id=p.id AND rp2.user_id=?) reposted
                FROM posts p JOIN users u ON u.id=p.user_id
                WHERE p.parent_id=? ORDER BY p.created_at ASC""",
-            (viewer, post_id)
+            (viewer, viewer, post_id)
         ).fetchall()
     if not post:
         return jsonify(error="not_found"), 404
@@ -568,6 +599,34 @@ def api_v1_like(user, post_id):
             liked = True
         count = con.execute("SELECT COUNT(*) c FROM likes WHERE post_id=?", (post_id,)).fetchone()["c"]
     return jsonify(liked=liked, likes=count)
+
+@app.post("/api/v1/posts/<int:post_id>/repost")
+@api_auth_required
+def api_v1_repost(user, post_id):
+    with db() as con:
+        exists = con.execute(
+            "SELECT 1 FROM reposts WHERE user_id=? AND post_id=?", (user["id"], post_id)
+        ).fetchone()
+        if exists:
+            con.execute("DELETE FROM reposts WHERE user_id=? AND post_id=?", (user["id"], post_id))
+            reposted = False
+        else:
+            con.execute(
+                "INSERT OR IGNORE INTO reposts(user_id,post_id) VALUES(?,?)",
+                (user["id"], post_id)
+            )
+            reposted = True
+        count = con.execute("SELECT COUNT(*) c FROM reposts WHERE post_id=?", (post_id,)).fetchone()["c"]
+    return jsonify(reposted=reposted, reposts=count)
+
+@app.get("/api/v1/streams")
+def api_v1_streams():
+    with db() as con:
+        st = con.execute("SELECT * FROM stream_status WHERE id=1").fetchone()
+        history = con.execute(
+            "SELECT * FROM stream_history ORDER BY COALESCE(started_at,ended_at,created_at) DESC LIMIT 80"
+        ).fetchall()
+    return jsonify(stream=dict(st), history=[dict(x) for x in history])
 
 @app.get("/api/v1/profile/<username>")
 def api_v1_profile(username):
@@ -723,7 +782,16 @@ def create_post():
 @app.get("/forum")
 def forum():
     posts = feed_query("WHERE p.parent_id IS NULL")
-    return render_template("forum.html", posts=posts)
+    return render_template(device_template("forum"), posts=posts)
+
+@app.get("/streams")
+def streams():
+    with db() as con:
+        st = con.execute("SELECT * FROM stream_status WHERE id=1").fetchone()
+        history = con.execute(
+            "SELECT * FROM stream_history ORDER BY COALESCE(started_at,ended_at,created_at) DESC LIMIT 80"
+        ).fetchall()
+    return render_template(device_template("streams"), stream=st, history=history)
 
 @app.get("/p/<int:post_id>")
 def post_detail(post_id):
@@ -765,6 +833,23 @@ def like_post(post_id):
         else:
             con.execute("INSERT OR IGNORE INTO likes(user_id,post_id) VALUES(?,?)", (session["uid"], post_id))
     return redirect(request.referrer or url_for("post_detail", post_id=post_id))
+
+@app.post("/p/<int:post_id>/repost")
+@login_required
+def repost_post(post_id):
+    with db() as con:
+        exists = con.execute(
+            "SELECT 1 FROM reposts WHERE user_id=? AND post_id=?",
+            (session["uid"], post_id)
+        ).fetchone()
+        if exists:
+            con.execute("DELETE FROM reposts WHERE user_id=? AND post_id=?", (session["uid"], post_id))
+        else:
+            con.execute(
+                "INSERT OR IGNORE INTO reposts(user_id,post_id) VALUES(?,?)",
+                (session["uid"], post_id)
+            )
+    return redirect(request.referrer or url_for("forum"))
 
 @app.get("/u/<username>")
 def profile(username):
