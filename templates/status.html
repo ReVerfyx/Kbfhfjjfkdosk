@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Статус Mellstroy{% endblock %}
+{% block content %}
+<section class="status-page-hero status-page-{{st.code}}">
+  <div class="status-page-image"></div>
+  <div class="status-page-content">
+    <span class="eyebrow">MELLSTROY STATUS</span>
+    <h1>{{st.label}}</h1>
+    <p>{{st.detail}}</p>
+    <div class="status-page-meta">
+      <span>📍 {{st.location}}</span>
+      <span>↻ {{st.updated_at}}</span>
+      {% if st.source_url %}<a href="{{st.source_url}}" target="_blank" rel="noopener">Главный источник ↗</a>{% endif %}
+    </div>
+  </div>
+</section>
+
+{% if st.code in ['alert','possibly_detained','confirmed_detained','storm','strange'] %}
+<section class="red-notice">
+  <span class="alarm-lamp"></span>
+  <div><b>Тревожный режим включён</b><p>Красная индикация включается при тревожных сигналах или сообщениях о возможном задержании. Это не означает автоматического подтверждения события.</p></div>
+</section>
+{% endif %}
+
+<section class="status-layout">
+  <div class="panel">
+    <div class="panel-head"><div><span class="eyebrow">TIMELINE</span><h2>Публичные сигналы</h2></div><span class="live-chip">AUTO</span></div>
+    <div class="timeline-list">
+      {% for e in events %}
+      <a class="timeline-event {% if e.urgent %}urgent{% endif %}" href="{{e.url}}" target="_blank" rel="noopener">
+        <span class="timeline-dot"></span>
+        <div><b>{{e.title}}</b><small>{{e.source}} · {{e.published_at or e.created_at}}</small><p>{{e.summary[:220]}}{% if e.summary|length > 220 %}…{% endif %}</p></div>
+      </a>
+      {% else %}<div class="empty">Сигналов пока нет.</div>{% endfor %}
+    </div>
+  </div>
+  <aside class="status-side">
+    <div class="sidecard">
+      <span class="eyebrow">ЛОГИКА СТАТУСА</span>
+      <h3>Как читать индикатор</h3>
+      <div class="legend"><i class="green"></i><div><b>Всё в порядке</b><small>Нет свежих тревожных подтверждений.</small></div></div>
+      <div class="legend"><i class="orange"></i><div><b>Нет информации</b><small>Недостаточно данных.</small></div></div>
+      <div class="legend"><i class="red"></i><div><b>Тревога</b><small>Есть тревожные публикации; подтверждение проверяется отдельно.</small></div></div>
+    </div>
+    <div class="sidecard">
+      <span class="eyebrow">PRIVACY</span>
+      <h3>Без слежки</h3>
+      <p>Сайт показывает только публично опубликованный общий регион/страну. Точные адреса, GPS и частные данные не собираются.</p>
+    </div>
+  </aside>
+</section>
+{% endblock %}
