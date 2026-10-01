@@ -22,7 +22,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Syntax check
-        run: python -m py_compile app.py db.py monitor.py
+        run: python -m py_compile app.py db.py monitor.py moderation.py
+
+      - name: Check installer syntax
+        run: bash -n install.sh
       - name: Install backend requirements
         run: pip install -r requirements.txt
       - name: Import application and render desktop/mobile pages
