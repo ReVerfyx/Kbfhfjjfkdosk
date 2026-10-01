@@ -117,7 +117,43 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
-cat >/etc/nginx/sites-available/mama-bird <<'EOF'
+CERT="/etc/letsencrypt/live/mellstroy.work.gd/fullchain.pem"
+KEY="/etc/letsencrypt/live/mellstroy.work.gd/privkey.pem"
+
+if [ -f "$CERT" ] && [ -f "$KEY" ]; then
+  sed -i 's/^MW_HTTPS=.*/MW_HTTPS=1/' /etc/mama-bird.env || true
+  cat >/etc/nginx/sites-available/mama-bird <<'EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name mellstroy.work.gd www.mellstroy.work.gd;
+    return 301 https://mellstroy.work.gd$request_uri;
+}
+server {
+    listen 443 ssl http2 default_server;
+    listen [::]:443 ssl http2 default_server;
+    server_name mellstroy.work.gd www.mellstroy.work.gd;
+    ssl_certificate /etc/letsencrypt/live/mellstroy.work.gd/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mellstroy.work.gd/privkey.pem;
+    client_max_body_size 80m;
+
+    location /static/uploads/ {
+        alias /opt/mama-bird/static/uploads/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8055;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+else
+  cat >/etc/nginx/sites-available/mama-bird <<'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -139,7 +175,7 @@ server {
     }
 }
 EOF
-
+fi
 rm -f /etc/nginx/sites-enabled/default
 ln -sf /etc/nginx/sites-available/mama-bird /etc/nginx/sites-enabled/mama-bird
 
