@@ -10,7 +10,9 @@
       {% for code,title in [
         ('checking','Нет информации / проверяем'),
         ('ok','Всё хорошо'),
-        ('alert','Тревожные новости / странные сообщения'),
+        ('alert','Тревожные новости'),
+        ('storm','Штурм / жёсткая тревога'),
+        ('strange','Странные сообщения / пропал со связи'),
         ('possibly_detained','Возможно задержан'),
         ('confirmed_detained','Задержание подтверждено')
       ] %}<option value="{{code}}" {% if st.code==code %}selected{% endif %}>{{title}}</option>{% endfor %}
