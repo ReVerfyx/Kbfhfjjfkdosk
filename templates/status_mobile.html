@@ -1,0 +1,6 @@
+{% extends "base_mobile.html" %}{% block title %}Статус Mellstroy{% endblock %}{% block content %}
+<section class="mobile-status-detail status-{{st.code}}"><div class="detail-photo"></div><div class="detail-copy"><small>ПЕРВИЧНЫЕ ИСТОЧНИКИ</small><h1>{{st.label}}</h1><p>{{st.detail}}</p><div class="mobile-meta"><span>{{st.location}}</span><span>{{st.updated_at}}</span></div>{% if st.source_url %}<a class="v4-primary mobile-full" href="{{st.source_url}}" target="_blank">Открыть первичный источник</a>{% endif %}</div></section>
+<div class="mobile-explain"><b>Почему статус теперь точнее</b><p>Google News сам по себе не включает красную сирену. Нужен первичный сигнал или несколько независимых подтверждений; старая тревога автоматически гаснет.</p></div>
+<div class="mobile-section-title"><div><small>CHRONOLOGY</small><h2>Последние сигналы</h2></div></div>
+<div class="mobile-signals detailed">{% for e in events %}<a href="{{e.url}}" target="_blank" class="{% if e.urgent %}urgent{% endif %}"><span></span><div><b>{{e.title}}</b><small>{{e.source}} · {{e.published_at or e.created_at}}</small>{% if e.summary %}<p>{{e.summary[:160]}}{% if e.summary|length>160 %}…{% endif %}</p>{% endif %}</div></a>{% endfor %}</div>
+{% endblock %}
