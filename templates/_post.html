@@ -1,19 +1,19 @@
-<article class="xpost">
-  <a class="avatar" href="/u/{{p.username}}">{{p.username[:1]|upper}}</a>
-  <div class="xbody">
-    <div class="xmeta"><a href="/u/{{p.username}}">@{{p.username}}</a><span>· {{p.created_at}}</span></div>
-    {% if p.body %}<div class="xtext">{{p.body}}</div>{% endif %}
-    {% if p.image_path %}<a href="/p/{{p.id}}" class="postimage"><img src="{{url_for('static',filename=p.image_path)}}" alt="Фото публикации"></a>{% endif %}
-    <div class="actions">
-      <a href="/p/{{p.id}}">💬 {{p.replies_count}}</a>
-      {% if me %}
-      <form action="/p/{{p.id}}/like" method="post">
-        <input type="hidden" name="_csrf" value="{{csrf_token()}}">
-        <button>♡ {{p.likes_count}}</button>
-      </form>
-      {% else %}<a href="/login">♡ {{p.likes_count}}</a>{% endif %}
-      <a href="/p/{{p.id}}">◉ {{p.views}}</a>
-      <a href="/p/{{p.id}}">↗</a>
-    </div>
+<article class="reddit-post">
+  <div class="reddit-head">
+    <a class="reddit-avatar" href="/u/{{p.username}}">{{p.username[:1]|upper}}</a>
+    <div class="reddit-author"><a href="/u/{{p.username}}">@{{p.username}}</a><small>{{p.created_at}}</small></div>
+  </div>
+  {% if p.body %}<div class="reddit-text">{{p.body}}</div>{% endif %}
+  {% if p.image_path %}<a class="reddit-media" href="/p/{{p.id}}"><img src="/static/{{p.image_path}}" alt="Фото"></a>{% endif %}
+  <div class="reddit-actions">
+    {% if me %}
+    <form action="/p/{{p.id}}/like" method="post"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button class="act-like">♥ <span>{{p.likes_count|default(0)}}</span><small>Нравится</small></button></form>
+    {% else %}<a href="/login" class="act-like">♥ <span>{{p.likes_count|default(0)}}</span><small>Нравится</small></a>{% endif %}
+    <a href="/p/{{p.id}}">● <span>{{p.replies_count|default(0)}}</span><small>Ответы</small></a>
+    {% if me %}
+    <form action="/p/{{p.id}}/repost" method="post"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button>↻ <span>{{p.reposts_count|default(0)}}</span><small>Репост</small></button></form>
+    {% else %}<a href="/login">↻ <span>{{p.reposts_count|default(0)}}</span><small>Репост</small></a>{% endif %}
+    <button type="button" onclick="sharePost('{{public_url}}/p/{{p.id}}')">↗ <small>Поделиться</small></button>
+    <span class="reddit-views">◉ {{p.views|default(0)}}</span>
   </div>
 </article>
