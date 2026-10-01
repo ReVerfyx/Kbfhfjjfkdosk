@@ -1,0 +1,31 @@
+name: Expand application source
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand bundled source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f .bundle/part1.b64 ]; then
+            cat .bundle/part*.b64 | tr -d '\n\r ' | base64 -d > /tmp/mama-bird-source.zip
+            unzip -o /tmp/mama-bird-source.zip -d .
+            rm -rf .bundle
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Expand application source"
+            git push
+          fi
