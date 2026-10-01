@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <section id="status" class="statushero status-{{st.code}}">
+  {% if st.code == 'confirmed_detained' %}
+  <div class="danger-wall" aria-hidden="true">
+    <video autoplay muted loop playsinline src="/static/video/defense-1.mp4"></video>
+    <video autoplay muted loop playsinline src="/static/video/defense-2.mp4"></video>
+    <video autoplay muted loop playsinline src="/static/video/defense-3.mp4"></video>
+    <video autoplay muted loop playsinline src="/static/video/defense-4.mp4"></video>
+  </div>
+  <div class="danger-banner">ТРЕВОГА · ЗАДЕРЖАНИЕ ПОДТВЕРЖДЕНО<small>На фоне — присланные футажи. Звук тревоги включается при первом взаимодействии с сайтом.</small></div>
+  {% endif %}
   <div class="statusshade"></div>
   <div class="heroinner">
     <div class="eyebrow">LIVE STATUS · PUBLIC SOURCES</div>
@@ -76,3 +85,26 @@
   </aside>
 </section>
 {% endblock %}
+
+{% if st.code == 'confirmed_detained' %}
+<script>
+document.body.classList.add('detained-alert');
+(function(){
+  let started=false;
+  function alarm(){
+    if(started)return; started=true;
+    try{
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC)return;
+      const ctx=new AC(), osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.type='sawtooth'; gain.gain.value=.024; osc.connect(gain).connect(ctx.destination); osc.start();
+      let hi=false;
+      const t=setInterval(()=>{hi=!hi;osc.frequency.setValueAtTime(hi?900:610,ctx.currentTime)},320);
+      setTimeout(()=>{clearInterval(t);try{osc.stop()}catch(e){};ctx.close()},10000);
+    }catch(e){}
+  }
+  alarm();
+  ['pointerdown','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,alarm,{once:true}));
+})();
+</script>
+{% endif %}
