@@ -1,4 +1,4 @@
-import os, re, secrets, time, uuid, requests, hashlib, base64
+import os, re, secrets, time, uuid, requests, hashlib, base64, json, subprocess, tempfile
 from functools import wraps
 from pathlib import Path
 from io import BytesIO
@@ -10,6 +10,7 @@ from flask import (
 from PIL import Image, ImageDraw, ImageFont
 from werkzeug.security import generate_password_hash, check_password_hash
 from db import db, init_db
+from moderation import moderate_text, moderate_image, moderate_video
 
 APP_DIR = Path(__file__).resolve().parent
 PUBLIC_URL = os.getenv("MW_PUBLIC_URL", "https://mellstroy.work.gd").rstrip("/")
@@ -22,7 +23,7 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.getenv("MW_HTTPS", "0") == "1",
-    MAX_CONTENT_LENGTH=6 * 1024 * 1024,
+    MAX_CONTENT_LENGTH=80 * 1024 * 1024,
 )
 init_db()
 
@@ -146,6 +147,7 @@ def post_to_json(row):
         "username": row["username"],
         "body": row["body"],
         "image_url": image_url,
+        "video_url": public_media_url(row["video_path"]) if "video_path" in keys else None,
         "parent_id": row["parent_id"],
         "views": row["views"],
         "likes": row["likes_count"],
@@ -153,12 +155,16 @@ def post_to_json(row):
         "reposts": row["reposts_count"] if "reposts_count" in keys else 0,
         "liked": bool(row["liked"]) if "liked" in keys else False,
         "reposted": bool(row["reposted"]) if "reposted" in keys else False,
+        "verified": bool(row["verified"]) if "verified" in keys else False,
+        "sponsor_badge": bool(row["sponsor_badge"]) if "sponsor_badge" in keys else False,
+        "avatar_url": public_media_url(row["avatar_path"]) if "avatar_path" in keys else None,
+        "display_name": (row["display_name"] or row["username"]) if "display_name" in keys else row["username"],
         "created_at": row["created_at"],
     }
 
 def api_feed_rows(where_sql="WHERE p.parent_id IS NULL", params=(), viewer_id=-1, limit=60):
     sql = f"""
-      SELECT p.*,u.username,
+      SELECT p.*,u.username,u.display_name,u.avatar_path,u.verified,u.sponsor_badge,
       (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
       (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
       (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count,
@@ -270,6 +276,124 @@ def save_post_image(storage):
     name = f"{uuid.uuid4().hex}.webp"
     img.save(UPLOAD_DIR / name, "WEBP", quality=82, method=6)
     return f"uploads/{name}"
+
+
+def public_media_url(path):
+    return (PUBLIC_URL + "/static/" + path) if path else None
+
+def save_video(storage, prefix="video", max_seconds=90):
+    if not storage or not storage.filename:
+        return None
+    if not (storage.mimetype or "").startswith("video/"):
+        raise ValueError("Нужен видеофайл.")
+    tmp_name = f"{uuid.uuid4().hex}.upload"
+    tmp_path = UPLOAD_DIR / tmp_name
+    out_name = f"{prefix}-{uuid.uuid4().hex}.mp4"
+    out_path = UPLOAD_DIR / out_name
+    storage.save(tmp_path)
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(tmp_path),
+            "-t", str(max_seconds),
+            "-vf", "scale='min(720,iw)':-2:force_original_aspect_ratio=decrease",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "29",
+            "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(out_path)
+        ], check=True, timeout=120)
+        ok, reason, score = moderate_video(out_path)
+        if not ok:
+            out_path.unlink(missing_ok=True)
+            raise ValueError(reason or "Видео отклонено модерацией.")
+        return f"uploads/{out_name}"
+    except subprocess.TimeoutExpired:
+        out_path.unlink(missing_ok=True)
+        raise ValueError("Видео слишком долго обрабатывается.")
+    except subprocess.CalledProcessError:
+        out_path.unlink(missing_ok=True)
+        raise ValueError("Не удалось обработать видео.")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+def save_audio(storage):
+    if not storage or not storage.filename:
+        return None
+    if not (storage.mimetype or "").startswith("audio/"):
+        raise ValueError("Нужен аудиофайл.")
+    tmp_path = UPLOAD_DIR / f"{uuid.uuid4().hex}.audio"
+    out_name = f"music-{uuid.uuid4().hex}.m4a"
+    out_path = UPLOAD_DIR / out_name
+    storage.save(tmp_path)
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-v", "error", "-i", str(tmp_path),
+            "-t", "60", "-vn", "-c:a", "aac", "-b:a", "96k", str(out_path)
+        ], check=True, timeout=60)
+        return f"uploads/{out_name}"
+    except Exception:
+        out_path.unlink(missing_ok=True)
+        raise ValueError("Не удалось обработать музыку.")
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+def save_moderated_image(storage, max_size=(1800, 1800), prefix="img"):
+    path = save_post_image(storage)
+    if not path:
+        return None
+    full = APP_DIR / "static" / path
+    ok, reason, score = moderate_image(full)
+    if not ok:
+        full.unlink(missing_ok=True)
+        raise ValueError(reason or "Изображение отклонено модерацией.")
+    return path
+
+def user_payload(user_id, viewer_id=None):
+    with db() as con:
+        u = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not u:
+            return None
+        followers = con.execute("SELECT COUNT(*) c FROM follows WHERE following_id=?", (user_id,)).fetchone()["c"]
+        following = con.execute("SELECT COUNT(*) c FROM follows WHERE follower_id=?", (user_id,)).fetchone()["c"]
+        likes = con.execute(
+            "SELECT COUNT(*) c FROM likes l JOIN posts p ON p.id=l.post_id WHERE p.user_id=?",
+            (user_id,)
+        ).fetchone()["c"]
+        posts = con.execute("SELECT COUNT(*) c FROM posts WHERE user_id=? AND parent_id IS NULL", (user_id,)).fetchone()["c"]
+        followed = False
+        if viewer_id and viewer_id != user_id:
+            followed = bool(con.execute(
+                "SELECT 1 FROM follows WHERE follower_id=? AND following_id=?",
+                (viewer_id, user_id)
+            ).fetchone())
+    return {
+        "id": u["id"], "username": u["username"],
+        "display_name": u["display_name"] or u["username"],
+        "bio": u["bio"] or "",
+        "avatar_url": public_media_url(u["avatar_path"]),
+        "cover_url": public_media_url(u["cover_path"]),
+        "cover_type": u["cover_type"] or "image",
+        "verified": bool(u["verified"]),
+        "sponsor_badge": bool(u["sponsor_badge"]),
+        "theme": u["theme"] or "dark",
+        "music_title": u["music_title"] or "",
+        "music_url": public_media_url(u["music_path"]),
+        "followers": followers, "following": following,
+        "likes": likes, "posts_count": posts, "followed": followed,
+        "created_at": u["created_at"],
+    }
+
+def log_moderation(user_id, kind, target_id, decision, reason=None, score=0.0):
+    with db() as con:
+        con.execute(
+            "INSERT INTO moderation_log(user_id,kind,target_id,decision,reason,score) VALUES(?,?,?,?,?,?)",
+            (user_id, kind, target_id, decision, reason, float(score or 0))
+        )
+
+def support_public_config():
+    return {
+        "lolz_enabled": bool(os.getenv("MW_LOLZ_API_TOKEN") and os.getenv("MW_LOLZ_API_BASE")),
+        "ton_enabled": bool(os.getenv("MW_TON_WALLET")),
+        "ton_wallet": os.getenv("MW_TON_WALLET", ""),
+        "min_rub": 5,
+    }
 
 def feed_query(where="", params=()):
     sql = f"""
@@ -510,7 +634,7 @@ def api_v1_logout(user):
 @app.get("/api/v1/me")
 @api_auth_required
 def api_v1_me(user):
-    return jsonify(user=dict(user))
+    return jsonify(user=user_payload(user["id"], user["id"]))
 
 @app.get("/api/v1/status")
 def api_v1_status():
@@ -539,7 +663,7 @@ def api_v1_post(post_id):
     with db() as con:
         con.execute("UPDATE posts SET views=views+1 WHERE id=?", (post_id,))
         post = con.execute(
-            """SELECT p.*,u.username,
+            """SELECT p.*,u.username,u.display_name,u.avatar_path,u.verified,u.sponsor_badge,
                (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
                (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
                (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count,
@@ -549,7 +673,7 @@ def api_v1_post(post_id):
             (viewer, viewer, post_id)
         ).fetchone()
         replies = con.execute(
-            """SELECT p.*,u.username,
+            """SELECT p.*,u.username,u.display_name,u.avatar_path,u.verified,u.sponsor_badge,
                (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
                (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
                (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count,
@@ -634,16 +758,204 @@ def api_v1_streams():
 @app.get("/api/v1/profile/<username>")
 def api_v1_profile(username):
     viewer = api_user()
-    viewer_id = viewer["id"] if viewer else -1
+    viewer_id = viewer["id"] if viewer else None
     with db() as con:
         user = con.execute(
-            "SELECT id,username,is_admin,created_at FROM users WHERE username=? COLLATE NOCASE",
-            (username,)
+            "SELECT id FROM users WHERE username=? COLLATE NOCASE", (username,)
         ).fetchone()
     if not user:
         return jsonify(error="not_found"), 404
-    posts = api_feed_rows("WHERE p.user_id=? AND p.parent_id IS NULL", (user["id"],), viewer_id, 80)
-    return jsonify(user=dict(user), posts=[post_to_json(x) for x in posts])
+    profile = user_payload(user["id"], viewer_id)
+    posts = api_feed_rows("WHERE p.user_id=? AND p.parent_id IS NULL", (user["id"],), viewer_id or -1, 80)
+    return jsonify(user=profile, posts=[post_to_json(x) for x in posts])
+
+
+@app.post("/api/v1/profile/edit")
+@api_auth_required
+def api_v1_profile_edit(user):
+    display_name = (request.form.get("display_name") or "").strip()[:40]
+    bio = (request.form.get("bio") or "").strip()[:180]
+    theme = (request.form.get("theme") or "dark").strip()
+    music_title = (request.form.get("music_title") or "").strip()[:80]
+    if theme not in ("dark", "black", "violet", "red"):
+        theme = "dark"
+
+    ok, reason, score = moderate_text(f"{display_name}\n{bio}")
+    if not ok:
+        log_moderation(user["id"], "profile", user["id"], "blocked", reason, score)
+        return jsonify(error="moderation", message=reason or "Описание отклонено модерацией."), 400
+
+    avatar = None
+    cover = None
+    cover_type = None
+    music = None
+    try:
+        if request.files.get("avatar"):
+            avatar = save_moderated_image(request.files.get("avatar"), prefix="avatar")
+        cover_file = request.files.get("cover")
+        if cover_file and cover_file.filename:
+            if (cover_file.mimetype or "").startswith("video/"):
+                cover = save_video(cover_file, "cover", 18)
+                cover_type = "video"
+            else:
+                cover = save_moderated_image(cover_file, prefix="cover")
+                cover_type = "image"
+        if request.files.get("music"):
+            music = save_audio(request.files.get("music"))
+    except ValueError as exc:
+        return jsonify(error="media", message=str(exc)), 400
+
+    with db() as con:
+        old = con.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
+        con.execute(
+            """UPDATE users SET display_name=?,bio=?,theme=?,music_title=?,
+               avatar_path=?,cover_path=?,cover_type=?,music_path=? WHERE id=?""",
+            (
+                display_name or old["username"], bio, theme, music_title,
+                avatar or old["avatar_path"], cover or old["cover_path"],
+                cover_type or old["cover_type"], music or old["music_path"], user["id"]
+            )
+        )
+    return jsonify(ok=True, user=user_payload(user["id"], user["id"]))
+
+@app.post("/api/v1/profile/<username>/follow")
+@api_auth_required
+def api_v1_follow(user, username):
+    with db() as con:
+        target = con.execute("SELECT id FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone()
+        if not target:
+            return jsonify(error="not_found"), 404
+        if target["id"] == user["id"]:
+            return jsonify(error="self"), 400
+        exists = con.execute(
+            "SELECT 1 FROM follows WHERE follower_id=? AND following_id=?",
+            (user["id"], target["id"])
+        ).fetchone()
+        if exists:
+            con.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (user["id"], target["id"]))
+            followed = False
+        else:
+            con.execute("INSERT INTO follows(follower_id,following_id) VALUES(?,?)", (user["id"], target["id"]))
+            followed = True
+    return jsonify(followed=followed, profile=user_payload(target["id"], user["id"]))
+
+@app.post("/api/v1/verification/request")
+@api_auth_required
+def api_v1_verification_request(user):
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()[:500]
+    with db() as con:
+        existing = con.execute(
+            "SELECT id,status FROM verification_requests WHERE user_id=? ORDER BY id DESC LIMIT 1",
+            (user["id"],)
+        ).fetchone()
+        if existing and existing["status"] == "pending":
+            return jsonify(ok=True, status="pending")
+        con.execute(
+            "INSERT INTO verification_requests(user_id,message) VALUES(?,?)",
+            (user["id"], message)
+        )
+    return jsonify(ok=True, status="pending")
+
+@app.get("/api/v1/support")
+def api_v1_support():
+    return jsonify(**support_public_config())
+
+@app.post("/api/v1/support/lolz")
+@api_auth_required
+def api_v1_support_lolz(user):
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = round(float(data.get("amount", 0)), 2)
+    except Exception:
+        amount = 0
+    if amount < 5:
+        return jsonify(error="amount", message="Минимальная сумма — 5 ₽."), 400
+    base = os.getenv("MW_LOLZ_API_BASE", "").rstrip("/")
+    token = os.getenv("MW_LOLZ_API_TOKEN", "")
+    if not base or not token:
+        return jsonify(error="not_configured", message="Оплата через LOLZ пока не настроена."), 503
+
+    with db() as con:
+        cur = con.execute(
+            "INSERT INTO support_payments(user_id,provider,amount_rub) VALUES(?,?,?)",
+            (user["id"], "lolz", amount)
+        )
+        payment_id = cur.lastrowid
+
+    callback = PUBLIC_URL + "/payments/lolz/webhook"
+    payload = {
+        "amount": amount, "currency": "RUB",
+        "order_id": str(payment_id),
+        "callback_url": callback,
+        "description": "Поддержка проекта"
+    }
+    merchant = os.getenv("MW_LOLZ_MERCHANT_ID")
+    if merchant:
+        payload["merchant_id"] = merchant
+    try:
+        resp = requests.post(
+            base,
+            json=payload,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=20
+        )
+        if not resp.ok:
+            raise RuntimeError(f"HTTP {resp.status_code}")
+        data = resp.json()
+        external_id = str(data.get("id") or data.get("payment_id") or data.get("invoice_id") or "")
+        payment_url = data.get("url") or data.get("payment_url") or data.get("link")
+        if not payment_url:
+            raise RuntimeError("payment url missing")
+        with db() as con:
+            con.execute(
+                "UPDATE support_payments SET external_id=?,payment_url=?,meta_json=? WHERE id=?",
+                (external_id, payment_url, json.dumps(data, ensure_ascii=False)[:6000], payment_id)
+            )
+        return jsonify(ok=True, payment_id=payment_id, payment_url=payment_url)
+    except Exception as exc:
+        with db() as con:
+            con.execute("UPDATE support_payments SET status='error' WHERE id=?", (payment_id,))
+        print("lolz payment:", exc)
+        return jsonify(error="provider", message="Платёжный сервис временно недоступен."), 502
+
+@app.post("/payments/lolz/webhook")
+def lolz_webhook():
+    secret = os.getenv("MW_LOLZ_WEBHOOK_SECRET", "")
+    if secret:
+        supplied = request.headers.get("X-Webhook-Secret", "")
+        if not secrets.compare_digest(secret, supplied):
+            abort(403)
+    data = request.get_json(silent=True) or {}
+    order_id = str(data.get("order_id") or data.get("metadata", {}).get("order_id") or "")
+    state = str(data.get("status") or "").lower()
+    if not order_id.isdigit():
+        return jsonify(ok=False), 400
+    if state in ("paid", "success", "completed", "succeeded"):
+        with db() as con:
+            pay = con.execute("SELECT * FROM support_payments WHERE id=?", (int(order_id),)).fetchone()
+            if pay and pay["status"] != "paid":
+                con.execute(
+                    "UPDATE support_payments SET status='paid',paid_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (int(order_id),)
+                )
+                if pay["user_id"]:
+                    con.execute("UPDATE users SET sponsor_badge=1 WHERE id=?", (pay["user_id"],))
+    return jsonify(ok=True)
+
+@app.post("/api/v1/support/ton")
+def api_v1_support_ton():
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = round(float(data.get("amount", 0)), 2)
+    except Exception:
+        amount = 0
+    if amount < 5:
+        return jsonify(error="amount", message="Минимальная сумма — 5 ₽."), 400
+    wallet = os.getenv("MW_TON_WALLET", "")
+    if not wallet:
+        return jsonify(error="not_configured", message="TON-поддержка пока не настроена."), 503
+    return jsonify(ok=True, wallet=wallet, amount_rub=amount)
 
 @app.post("/api/v1/mellai")
 @api_auth_required
@@ -900,6 +1212,21 @@ def admin():
             "SELECT * FROM monitor_events ORDER BY created_at DESC LIMIT 80"
         ).fetchall()
     return render_template("admin.html", st=st, events=events)
+
+
+@app.post("/admin/user/<int:user_id>/verify")
+@admin_required
+def admin_verify_user(user_id):
+    value = 1 if request.form.get("verified", "1") == "1" else 0
+    with db() as con:
+        con.execute("UPDATE users SET verified=? WHERE id=?", (value, user_id))
+        con.execute(
+            "UPDATE verification_requests SET status=?,reviewed_at=CURRENT_TIMESTAMP "
+            "WHERE user_id=? AND status='pending'",
+            ("approved" if value else "rejected", user_id)
+        )
+    flash("Статус верификации обновлён.")
+    return redirect(url_for("admin"))
 
 def bootstrap_admin():
     username = os.getenv("MW_ADMIN_USER")
