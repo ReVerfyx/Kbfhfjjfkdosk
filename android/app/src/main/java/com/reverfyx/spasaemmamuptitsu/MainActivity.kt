@@ -739,18 +739,34 @@ private fun StatusHero(status: StatusDto?, onClick: () -> Unit, loading: Boolean
         Box(
             Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            accent.copy(alpha = 0.28f),
-                            Surface,
-                            Color(0xFF101116)
+                .height(270.dp)
+        ) {
+            AsyncImage(
+                model = statusPhoto(status?.code),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                alpha = 0.62f
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0x22000000),
+                                Color(0xAA090A0E),
+                                Color(0xFA0A0A0C)
+                            )
                         )
                     )
-                )
-                .padding(20.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
@@ -780,19 +796,21 @@ private fun StatusHero(status: StatusDto?, onClick: () -> Unit, loading: Boolean
                 )
                 Text(
                     status?.detail ?: "Подключение к mellstroy.work.gd",
-                    color = TextMuted,
-                    lineHeight = 20.sp
+                    color = Color(0xFFD0D1D7),
+                    lineHeight = 20.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
                 )
                 status?.let {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.LocationOn,
                             null,
-                            tint = TextMuted,
+                            tint = Color(0xFFB8BAC4),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(it.location, color = TextMuted, fontSize = 12.sp)
+                        Text(it.location, color = Color(0xFFB8BAC4), fontSize = 12.sp)
                     }
                 }
             }
@@ -1607,6 +1625,14 @@ private fun ProfileContent(
 
         item { Spacer(Modifier.height(24.dp)) }
     }
+}
+
+private fun statusPhoto(code: String?): String = when (code) {
+    "ok" -> "https://mellstroy.work.gd/static/img/archive-2.webp"
+    "alert", "storm" -> "https://mellstroy.work.gd/static/img/status-alert.webp"
+    "strange" -> "https://mellstroy.work.gd/static/img/status-strange.webp"
+    "possibly_detained", "confirmed_detained" -> "https://mellstroy.work.gd/static/img/status-detained.webp"
+    else -> "https://mellstroy.work.gd/static/img/status-checking.webp"
 }
 
 private fun shortDate(raw: String): String {
