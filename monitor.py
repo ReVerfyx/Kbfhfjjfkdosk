@@ -179,7 +179,10 @@ def stream_index():
         r = requests.get(src["url"], headers=UA, timeout=TIMEOUT)
         soup = BeautifulSoup(r.text, "html.parser")
         text = clean_text(soup.get_text("\n", strip=True))
-        is_live = bool(re.search(r"\bLIVE\b|\bLive now\b", text, re.I)) and "Mellstroy" in text
+        is_live = bool(
+            re.search(r"Mellstroy.{0,120}\bLIVE\b", text, re.I) or
+            re.search(r"\bLIVE\b.{0,120}Mellstroy", text, re.I)
+        )
         last = ""
         m = re.search(r"(Last online[^\n]{0,120}|Последний раз онлайн[^\n]{0,120})", text, re.I)
         if m:
