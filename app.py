@@ -40,9 +40,12 @@ def csrf_token():
 
 def is_mobile_request():
     forced = request.args.get("view")
-    if forced == "mobile":
+    if forced in ("mobile", "desktop"):
+        session["_view_mode"] = forced
+    preferred = session.get("_view_mode")
+    if preferred == "mobile":
         return True
-    if forced == "desktop":
+    if preferred == "desktop":
         return False
     ua = (request.headers.get("User-Agent") or "").lower()
     return any(x in ua for x in ("android", "iphone", "ipod", "mobile"))
