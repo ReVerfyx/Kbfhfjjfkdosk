@@ -1,0 +1,24 @@
+{% extends "base_desktop.html" %}{% block title %}@{{user.username}}{% endblock %}{% block content %}
+<section class="tiktok-profile theme-{{user.theme}}">
+  <div class="profile-cover">
+    {% if user.cover_url %}
+      {% if user.cover_type == 'video' %}<video src="{{user.cover_url}}" autoplay muted loop playsinline></video>{% else %}<img src="{{user.cover_url}}" alt="Фон профиля">{% endif %}
+    {% endif %}
+    <div class="profile-cover-shade"></div>
+  </div>
+  <div class="profile-main">
+    <div class="profile-avatar-xl">{% if user.avatar_url %}<img src="{{user.avatar_url}}" alt="Аватар">{% else %}{{user.username[:1]|upper}}{% endif %}</div>
+    <div class="profile-title"><h1>{{user.display_name}} {% if user.verified %}<span class="badge verified" title="Верифицирован">✓</span>{% endif %}{% if user.sponsor_badge %}<span class="badge sponsor" title="Поддержал проект">★</span>{% endif %}</h1><p>@{{user.username}}</p></div>
+    <div class="profile-actions">
+      {% if me and me.username == user.username %}<a class="v4-secondary" href="/settings/profile">Редактировать профиль</a>
+      {% elif me %}<form action="/u/{{user.username}}/follow" method="post"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button class="v4-primary">{{'Отписаться' if user.followed else 'Подписаться'}}</button></form>
+      {% else %}<a class="v4-primary" href="/login?next=/u/{{user.username}}">Подписаться</a>{% endif %}
+    </div>
+    <div class="profile-stats"><div><b>{{user.following}}</b><span>Подписки</span></div><div><b>{{user.followers}}</b><span>Подписчики</span></div><div><b>{{user.likes}}</b><span>Лайки</span></div><div><b>{{user.posts_count}}</b><span>Публикации</span></div></div>
+    {% if user.bio %}<p class="profile-bio">{{user.bio}}</p>{% endif %}
+    {% if user.music_url %}<div class="profile-music"><span>♫</span><div><b>{{user.music_title or 'Музыка профиля'}}</b><audio controls preload="none" src="{{user.music_url}}"></audio></div></div>{% endif %}
+  </div>
+</section>
+<div class="profile-tabs"><button class="active">Публикации</button><span>Фото и видео</span></div>
+<div class="profile-post-grid">{% for p in posts %}<a href="/p/{{p.id}}" class="profile-post-tile">{% if p.video_path %}<video src="/static/{{p.video_path}}" muted preload="metadata"></video><span class="media-type">▶</span>{% elif p.image_path %}<img src="/static/{{p.image_path}}" alt="Пост">{% else %}<div class="text-tile">{{p.body[:90]}}</div>{% endif %}<small>♥ {{p.likes_count}} · ◉ {{p.views}}</small></a>{% else %}<div class="v4-empty">Публикаций пока нет.</div>{% endfor %}</div>
+{% endblock %}
