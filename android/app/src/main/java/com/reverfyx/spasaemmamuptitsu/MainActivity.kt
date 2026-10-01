@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
@@ -144,7 +145,7 @@ enum class MainTab(val label: String, val icon: ImageVector) {
 }
 
 private val alertCodes = setOf(
-    "alert", "possibly_detained", "confirmed_detained", "storm", "strange"
+    "possibly_detained", "confirmed_detained", "storm"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -466,7 +467,7 @@ private fun AuthScreen(vm: MainViewModel, allowGuest: Boolean, onClose: () -> Un
                         fontSize = 24.sp
                     )
                     Text(
-                        "Нативное приложение · mellstroy.work.gd",
+                        "Подключение к серверу",
                         color = TextMuted,
                         fontSize = 12.sp
                     )
@@ -652,6 +653,25 @@ private fun HomeScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        if (!vm.connectionOk && vm.status == null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Surface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text("Подключение к серверу", fontWeight = FontWeight.Black, fontSize = 18.sp)
+                        Text("Сервер пока не ответил. Проверь соединение и попробуй ещё раз.", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 5.dp))
+                        OutlinedButton(onClick = { vm.retryConnection() }, modifier = Modifier.padding(top = 10.dp)) {
+                            Icon(Icons.Default.Refresh, null)
+                            Spacer(Modifier.width(5.dp))
+                            Text("Повторить")
+                        }
+                    }
+                }
+            }
+        }
         item {
             StatusHero(
                 status = vm.status,
@@ -698,7 +718,8 @@ private fun HomeScreen(
                 post = post,
                 onOpen = { onPost(post.id) },
                 onLike = { vm.toggleLike(post.id) },
-                onProfile = { onProfile(post.username) }
+                onProfile = { onProfile(post.username) },
+                onRepost = { vm.toggleRepost(post.id) }
             )
         }
 
@@ -795,7 +816,7 @@ private fun StatusHero(status: StatusDto?, onClick: () -> Unit, loading: Boolean
                     fontWeight = FontWeight.Black
                 )
                 Text(
-                    status?.detail ?: "Подключение к mellstroy.work.gd",
+                    status?.detail ?: "Подключение к серверу",
                     color = Color(0xFFD0D1D7),
                     lineHeight = 20.sp,
                     maxLines = 3,
@@ -925,7 +946,8 @@ private fun PostCard(
     post: PostDto,
     onOpen: () -> Unit,
     onLike: () -> Unit,
-    onProfile: () -> Unit
+    onProfile: () -> Unit,
+    onRepost: () -> Unit = {}
 ) {
     Column(
         Modifier
@@ -935,23 +957,44 @@ private fun PostCard(
             .padding(horizontal = 14.dp, vertical = 13.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(post.username, 38)
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(AccentSoft.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!post.avatarUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = post.avatarUrl,
+                        contentDescription = "Аватар",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Text(post.username.take(1).uppercase(), fontWeight = FontWeight.Black)
+                }
+            }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "@${post.username}",
+                        post.displayName ?: "@${post.username}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         modifier = Modifier.clickable(onClick = onProfile)
                     )
-                    if (post.username.equals("mellai", true)) {
-                        Spacer(Modifier.width(5.dp))
-                        Text("✦", color = AccentSoft, fontSize = 13.sp)
+                    if (post.verified) {
+                        Spacer(Modifier.width(4.dp))
+                        Text("✓", color = Color(0xFF2E8CFF), fontWeight = FontWeight.Black)
+                    }
+                    if (post.sponsorBadge) {
+                        Spacer(Modifier.width(4.dp))
+                        Text("★", color = Color(0xFF27C97B), fontWeight = FontWeight.Black)
                     }
                 }
                 Text(
-                    shortDate(post.createdAt),
+                    "@${post.username} · ${shortDate(post.createdAt)}",
                     color = TextMuted,
                     fontSize = 10.sp
                 )
@@ -967,18 +1010,29 @@ private fun PostCard(
             )
         }
 
-        post.imageUrl?.let {
-            AsyncImage(
-                model = it,
-                contentDescription = "Фото",
-                contentScale = ContentScale.Crop,
+        if (!post.videoUrl.isNullOrBlank()) {
+            InlineVideo(
+                url = post.videoUrl,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 11.dp)
-                    .aspectRatio(1.35f)
+                    .aspectRatio(9f / 12f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Surface2)
             )
+        } else {
+            post.imageUrl?.let {
+                AsyncImage(
+                    model = it,
+                    contentDescription = "Фото",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 11.dp)
+                        .aspectRatio(1.15f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Surface2)
+                )
+            }
         }
 
         Row(
@@ -998,6 +1052,13 @@ private fun PostCard(
                 icon = Icons.Default.ChatBubbleOutline,
                 text = post.replies.toString(),
                 onClick = onOpen
+            )
+            Spacer(Modifier.width(18.dp))
+            StatAction(
+                icon = Icons.Default.Repeat,
+                text = post.reposts.toString(),
+                tint = if (post.reposted) Good else TextMuted,
+                onClick = onRepost
             )
             Spacer(Modifier.width(18.dp))
             StatAction(
@@ -1214,7 +1275,8 @@ private fun PostDetailScreen(
                 post = detail.post,
                 onOpen = {},
                 onLike = { vm.toggleLike(detail.post.id) },
-                onProfile = { onProfile(detail.post.username) }
+                onProfile = { onProfile(detail.post.username) },
+                onRepost = { vm.toggleRepost(detail.post.id) }
             )
         }
 
@@ -1247,7 +1309,8 @@ private fun PostDetailScreen(
                 post = reply,
                 onOpen = {},
                 onLike = { vm.toggleLike(reply.id) },
-                onProfile = { onProfile(reply.username) }
+                onProfile = { onProfile(reply.username) },
+                onRepost = { vm.toggleRepost(reply.id) }
             )
         }
 
@@ -1314,23 +1377,33 @@ private fun ComposerSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            imageUri?.let {
-                AsyncImage(
-                    model = it,
-                    contentDescription = "Выбранное изображение",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                )
+            imageUri?.let { uri ->
+                val mime = context.contentResolver.getType(uri).orEmpty()
+                if (mime.startsWith("video/")) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Surface2),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Видео выбрано · будет сжато на сервере", modifier = Modifier.padding(16.dp), color = TextMuted)
+                    }
+                } else {
+                    AsyncImage(
+                        model = uri,
+                        contentDescription = "Выбранное изображение",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    )
+                }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { picker.launch("image/*") }) {
+                OutlinedButton(onClick = { picker.launch("*/*") }) {
                     Icon(Icons.Default.Image, null)
                     Spacer(Modifier.width(6.dp))
-                    Text(if (imageUri == null) "Фото" else "Сменить фото")
+                    Text(if (imageUri == null) "Фото / видео" else "Сменить медиа")
                 }
                 Spacer(Modifier.weight(1f))
                 Text("${text.length}/500", color = TextMuted, fontSize = 11.sp)
@@ -1398,7 +1471,7 @@ private fun MellaiScreen(vm: MainViewModel) {
                 Column {
                     Text("@mellai", fontWeight = FontWeight.Black, fontSize = 20.sp)
                     Text(
-                        "ИИ о Mellstroy · Qwen на сервере",
+                        "ИИ-помощник о Mellstroy",
                         color = TextMuted,
                         fontSize = 11.sp
                     )
@@ -1551,81 +1624,9 @@ private fun ProfileContent(
     onPost: (Int) -> Unit,
     own: Boolean = false
 ) {
-    val profile = vm.profile
-
-    if (vm.profileLoading && profile == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Accent)
-        }
-        return
-    }
-
-    if (profile == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Профиль не загружен", color = TextMuted)
-        }
-        return
-    }
-
-    LazyColumn(Modifier.fillMaxSize()) {
-        item {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(AccentSoft.copy(alpha = 0.18f), Surface)
-                        )
-                    )
-                    .padding(20.dp)
-            ) {
-                Avatar(profile.user.username, 72)
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "@${profile.user.username}",
-                    fontSize = 27.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    if (profile.user.username.equals("mellai", true)) {
-                        "ИИ-помощник проекта"
-                    } else {
-                        "Участник сообщества"
-                    },
-                    color = TextMuted
-                )
-                Spacer(Modifier.height(11.dp))
-                Text(
-                    "${profile.posts.size} публикаций",
-                    color = TextMuted,
-                    fontSize = 12.sp
-                )
-
-                if (own) {
-                    Spacer(Modifier.height(14.dp))
-                    OutlinedButton(onClick = { vm.logout() }) {
-                        Text("Выйти из аккаунта")
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionTitle("Публикации", "Посты пользователя")
-        }
-
-        items(profile.posts, key = { it.id }) { post ->
-            PostCard(
-                post,
-                onOpen = { onPost(post.id) },
-                onLike = { vm.toggleLike(post.id) },
-                onProfile = {}
-            )
-        }
-
-        item { Spacer(Modifier.height(24.dp)) }
-    }
+    TikTokProfileScreen(vm = vm, onPost = onPost, own = own)
 }
+
 
 private fun statusPhoto(code: String?): String = when (code) {
     "ok" -> "https://mellstroy.work.gd/static/img/archive-2.webp"
