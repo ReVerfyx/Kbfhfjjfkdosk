@@ -1,5 +1,9 @@
 name: Сборка нативного APK — Спасаем маму-птицу
 
+concurrency:
+  group: android-native-build
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ "android-native" ]
