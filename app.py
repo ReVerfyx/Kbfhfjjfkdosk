@@ -1284,6 +1284,66 @@ def support():
     cfg = support_public_config()
     return render_template(device_template("support"), support=cfg)
 
+
+@app.post("/support/lolz")
+@login_required
+def support_lolz_web():
+    try:
+        amount = round(float(request.form.get("amount", "0")), 2)
+    except Exception:
+        amount = 0
+    if amount < 5:
+        flash("Минимальная сумма — 5 ₽.")
+        return redirect(url_for("support"))
+
+    base = os.getenv("MW_LOLZ_API_BASE", "").rstrip("/")
+    token = os.getenv("MW_LOLZ_API_TOKEN", "")
+    if not base or not token:
+        flash("Оплата через LOLZ пока не настроена.")
+        return redirect(url_for("support"))
+
+    with db() as con:
+        cur = con.execute(
+            "INSERT INTO support_payments(user_id,provider,amount_rub) VALUES(?,?,?)",
+            (session["uid"], "lolz", amount)
+        )
+        payment_id = cur.lastrowid
+
+    payload = {
+        "amount": amount,
+        "currency": "RUB",
+        "order_id": str(payment_id),
+        "callback_url": PUBLIC_URL + "/payments/lolz/webhook",
+        "description": "Поддержка проекта"
+    }
+    merchant = os.getenv("MW_LOLZ_MERCHANT_ID")
+    if merchant:
+        payload["merchant_id"] = merchant
+    try:
+        resp = requests.post(
+            base, json=payload,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=20
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        external_id = str(data.get("id") or data.get("payment_id") or data.get("invoice_id") or "")
+        payment_url = data.get("url") or data.get("payment_url") or data.get("link")
+        if not payment_url:
+            raise RuntimeError("payment url missing")
+        with db() as con:
+            con.execute(
+                "UPDATE support_payments SET external_id=?,payment_url=?,meta_json=? WHERE id=?",
+                (external_id, payment_url, json.dumps(data, ensure_ascii=False)[:6000], payment_id)
+            )
+        return redirect(payment_url)
+    except Exception as exc:
+        print("lolz web payment:", exc)
+        with db() as con:
+            con.execute("UPDATE support_payments SET status='error' WHERE id=?", (payment_id,))
+        flash("Платёжный сервис временно недоступен.")
+        return redirect(url_for("support"))
+
 @app.route("/admin", methods=["GET", "POST"])
 @admin_required
 def admin():
