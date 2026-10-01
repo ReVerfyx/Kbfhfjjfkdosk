@@ -138,7 +138,7 @@ def mellai_reply(body):
         st = con.execute("SELECT * FROM status WHERE id=1").fetchone()
         events = con.execute(
             "SELECT source,title,url,summary,published_at,official,urgent FROM monitor_events "
-            "ORDER BY COALESCE(published_at,created_at) DESC LIMIT 6"
+            "ORDER BY COALESCE(published_at,created_at) DESC LIMIT 12"
         ).fetchall()
     context = [
         f"Статус: {st['label']}",
@@ -147,22 +147,34 @@ def mellai_reply(body):
         f"Обновлено: {st['updated_at']}",
     ]
     for i, e in enumerate(events, 1):
-        context.append(f"Сигнал {i}: {e['title']} | {e['source']} | {e['url']}")
+        summary = (e["summary"] or "").replace("\n", " ").strip()[:420]
+        context.append(
+            f"Сигнал {i}: {e['title']} | источник: {e['source']} | "
+            f"официальный={bool(e['official'])} | срочный={bool(e['urgent'])} | "
+            f"{summary} | {e['url']}"
+        )
     prompt = (
-        "Ты @mellai — очень короткий русскоязычный бот фан-сайта о Mellstroy. "
-        "Отвечай ТОЛЬКО по Mellstroy и ТОЛЬКО по контексту ниже. Не выдумывай. "
-        "Неподтвержденные сведения называй неподтвержденными. Не давай точные адреса, GPS, "
-        "частную геолокацию или способы отследить человека. Максимум 4 коротких предложения.\n\n"
-        "КОНТЕКСТ:\n" + "\n".join(context) + "\n\nВОПРОС:\n" + re.sub(r"@mellai", "", body, flags=re.I).strip()
+        "Ты @mellai — русскоязычный ИИ-помощник фан-сайта о Mellstroy. "
+        "Отвечай естественно, содержательно и по делу, а не шаблонными двумя фразами. "
+        "Можно объяснять контекст, сопоставлять несколько последних сигналов и отдельно отмечать, "
+        "что подтверждено, что является сообщением СМИ/соцсетей, а что пока неизвестно. "
+        "Текущие события бери прежде всего из КОНТЕКСТА ниже. Для устойчивых общеизвестных фактов "
+        "о Mellstroy можешь использовать собственные знания, но не выдавай догадку за свежий факт. "
+        "Если данных недостаточно — скажи конкретно, чего именно не хватает. "
+        "Не выдумывай арест, освобождение, местонахождение или стрим. "
+        "Не давай точные адреса, GPS, частную геолокацию или способы отследить человека. "
+        "Отвечай только на тему Mellstroy. Обычно 3–8 предложений; на простой вопрос можно короче.\n\n"
+        "КОНТЕКСТ МОНИТОРИНГА:\n" + "\n".join(context) +
+        "\n\nВОПРОС ПОЛЬЗОВАТЕЛЯ:\n" + re.sub(r"@mellai", "", body, flags=re.I).strip()
     )
     try:
         base = os.getenv("MW_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
-        model = os.getenv("MW_MELLAI_MODEL", "qwen2.5:0.5b")
+        model = os.getenv("MW_MELLAI_MODEL", "qwen2.5:1.5b")
         r = requests.post(
             base + "/api/generate",
             json={"model": model, "prompt": prompt, "stream": False,
-                  "options": {"temperature": 0.2, "num_predict": 160}},
-            timeout=25,
+                  "options": {"temperature": 0.35, "num_predict": 320, "num_ctx": 4096}},
+            timeout=45,
         )
         if r.ok:
             out = (r.json().get("response") or "").strip()
