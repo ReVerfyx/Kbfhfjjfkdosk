@@ -40,6 +40,7 @@ MW_SOURCES=$APP/sources.json
 MW_HTTPS=0
 MW_OLLAMA_URL=http://127.0.0.1:11434
 MW_MELLAI_MODEL=qwen2.5:1.5b
+MW_PUBLIC_URL=https://mellstroy.work.gd
 EOF
 else
   if grep -q '^MW_MELLAI_MODEL=' /etc/mama-bird.env; then
@@ -47,13 +48,18 @@ else
   else
     echo 'MW_MELLAI_MODEL=qwen2.5:1.5b' >> /etc/mama-bird.env
   fi
+  if grep -q '^MW_PUBLIC_URL=' /etc/mama-bird.env; then
+    sed -i 's#^MW_PUBLIC_URL=.*#MW_PUBLIC_URL=https://mellstroy.work.gd#' /etc/mama-bird.env
+  else
+    echo 'MW_PUBLIC_URL=https://mellstroy.work.gd' >> /etc/mama-bird.env
+  fi
 fi
 chmod 600 /etc/mama-bird.env
 chown -R www-data:www-data "$APP/data" "$APP/static/uploads"
 
 cat >/etc/systemd/system/mama-bird.service <<EOF
 [Unit]
-Description=Mama Bird status + social web app
+Description=Спасаем маму-птицу — сайт
 After=network.target ollama.service
 
 [Service]
@@ -70,7 +76,7 @@ EOF
 
 cat >/etc/systemd/system/mama-bird-monitor.service <<EOF
 [Unit]
-Description=Mama Bird public source monitor
+Description=Спасаем маму-птицу — монитор публичных источников
 After=network-online.target
 
 [Service]
@@ -84,7 +90,7 @@ EOF
 
 cat >/etc/systemd/system/mama-bird-monitor.timer <<EOF
 [Unit]
-Description=Run Mama Bird monitor every 5 minutes
+Description=Монитор Спасаем маму-птицу каждые 5 минут
 
 [Timer]
 OnBootSec=30s
@@ -100,7 +106,7 @@ cat >/etc/nginx/sites-available/mama-bird <<'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name _;
+    server_name mellstroy.work.gd www.mellstroy.work.gd;
     client_max_body_size 6m;
 
     location /static/uploads/ {
@@ -130,7 +136,8 @@ systemctl start mama-bird-monitor.service || true
 IP="$(hostname -I | awk '{print $1}')"
 echo
 echo "============================================"
-echo "Сайт: http://$IP/"
+echo "Сайт: https://mellstroy.work.gd/"
+echo "IP: http://$IP/"
 echo "Админ: admin"
 if [ -n "$ADMIN_PASS" ]; then
   echo "Пароль: $ADMIN_PASS"
