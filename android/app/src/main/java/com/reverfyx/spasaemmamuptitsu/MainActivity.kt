@@ -45,6 +45,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -137,11 +142,11 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class MainTab(val label: String, val icon: ImageVector) {
-    HOME("Главная", Icons.Default.Home),
-    STATUS("Статус", Icons.Default.MonitorHeart),
-    FORUM("Форум", Icons.Default.Forum),
-    MELLAI("@mellai", Icons.Default.AutoAwesome),
-    PROFILE("Профиль", Icons.Default.Person)
+    HOME("Главная", Icons.Rounded.Home),
+    STATUS("Статус", Icons.Rounded.MonitorHeart),
+    FORUM("Форум", Icons.Rounded.Forum),
+    MELLAI("@mellai", Icons.Rounded.AutoAwesome),
+    PROFILE("Профиль", Icons.Rounded.Person)
 }
 
 private val alertCodes = setOf(
@@ -256,12 +261,29 @@ fun SpasaemApp(vm: MainViewModel) {
                             NavigationBarItem(
                                 selected = index == tabIndex,
                                 onClick = { tabIndex = index },
-                                icon = { Icon(tab.icon, null) },
-                                label = { Text(tab.label, fontSize = 10.sp) },
+                                icon = {
+                                    Box(
+                                        Modifier
+                                            .size(42.dp)
+                                            .background(
+                                                if (index == tabIndex) Accent.copy(alpha = 0.16f) else Color.Transparent,
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            tab.icon,
+                                            null,
+                                            tint = if (index == tabIndex) Accent else TextMuted,
+                                            modifier = Modifier.size(23.dp)
+                                        )
+                                    }
+                                },
+                                label = { Text(tab.label, fontSize = 9.sp) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Accent,
                                     selectedTextColor = TextPrimary,
-                                    indicatorColor = Accent.copy(alpha = 0.14f),
+                                    indicatorColor = Color.Transparent,
                                     unselectedIconColor = TextMuted,
                                     unselectedTextColor = TextMuted
                                 )
@@ -540,7 +562,14 @@ private fun AuthScreen(vm: MainViewModel, allowGuest: Boolean, onClose: () -> Un
                                         .padding(8.dp)
                                 )
                             } else {
-                                CircularProgressIndicator(Modifier.size(24.dp))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Проверка не загрузилась", color = TextMuted, fontSize = 11.sp)
+                                    TextButton(onClick = { vm.refreshCaptcha() }) {
+                                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("Повторить")
+                                    }
+                                }
                             }
                         }
                     }
@@ -598,7 +627,7 @@ private fun AuthScreen(vm: MainViewModel, allowGuest: Boolean, onClose: () -> Un
             }
 
             Text(
-                "Гостевой режим позволяет читать ленту и статус. Для публикаций, лайков и @mellai потребуется вход.",
+                "Без входа можно читать ленту и статус. Для публикаций, подписок и @mellai нужен аккаунт.",
                 color = TextMuted,
                 fontSize = 11.sp,
                 lineHeight = 16.sp
