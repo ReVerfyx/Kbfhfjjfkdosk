@@ -1,94 +1,105 @@
 package com.reverfyx.mamabirdforum;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER = 4001;
-    private static final String PREFS = "mama_forum";
-    private static final String KEY_URL = "server_url";
+    private static final String BASE_URL = "https://mellstroy.work.gd";
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
-    private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(Color.rgb(7,8,12));
-        getWindow().setNavigationBarColor(Color.rgb(7,8,12));
-        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        getWindow().setStatusBarColor(Color.rgb(7, 8, 12));
+        getWindow().setNavigationBarColor(Color.rgb(7, 8, 12));
         buildUi();
 
-        String url = prefs.getString(KEY_URL, "");
-        if (url.isEmpty()) {
-            showServerDialog(true);
+        if (state == null) {
+            open("/");
         } else {
-            loadForum(url);
+            webView.restoreState(state);
         }
     }
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(7,8,12));
+        root.setBackgroundColor(Color.rgb(7, 8, 12));
 
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(14), dp(8), dp(10), dp(8));
-        bar.setBackgroundColor(Color.rgb(10,12,18));
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setPadding(dp(14), dp(7), dp(8), dp(7));
+        top.setBackgroundColor(Color.rgb(9, 11, 17));
 
         TextView title = new TextView(this);
-        title.setText("🕊  СПАСАЕМ МАМУ-ПТИЦУ");
+        title.setText("СПАСАЕМ МАМУ-ПТИЦУ");
         title.setTextColor(Color.WHITE);
         title.setTextSize(16);
         title.setTypeface(null, 1);
-        bar.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
+        top.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
 
-        Button settingsButton = new Button(this);
-        settingsButton.setText("⚙");
-        settingsButton.setTextSize(18);
-        settingsButton.setTextColor(Color.WHITE);
-        settingsButton.setBackgroundColor(Color.TRANSPARENT);
-        settingsButton.setOnClickListener(v -> showServerDialog(false));
-        bar.addView(settingsButton, new LinearLayout.LayoutParams(dp(56), dp(48)));
+        Button refresh = makeTopButton("↻");
+        refresh.setOnClickListener(v -> webView.reload());
+        top.addView(refresh, new LinearLayout.LayoutParams(dp(52), dp(48)));
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(7,8,12));
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " SpasaemMamuPtitsu/1.0");
+        webView.setBackgroundColor(Color.rgb(7, 8, 12));
 
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+        WebSettings ws = webView.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setDomStorageEnabled(true);
+        ws.setDatabaseEnabled(true);
+        ws.setAllowFileAccess(true);
+        ws.setMediaPlaybackRequiresUserGesture(false);
+        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        ws.setUserAgentString(ws.getUserAgentString() + " SpasaemMamuPtitsu/2.0");
 
-        webView.setWebViewClient(new WebViewClient());
+        CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        cm.setAcceptThirdPartyCookies(webView, true);
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                String host = uri.getHost();
+                if (host != null && (host.equals("mellstroy.work.gd") || host.equals("www.mellstroy.work.gd"))) {
+                    return false;
+                }
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                    return true;
+                } catch (Exception ignored) {
+                    return false;
+                }
+            }
+        });
+
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+            public boolean onShowFileChooser(
+                    WebView view,
+                    ValueCallback<Uri[]> callback,
+                    FileChooserParams params
+            ) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
                 try {
@@ -103,55 +114,85 @@ public class MainActivity extends Activity {
             }
         });
 
-        root.addView(bar, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setGravity(Gravity.CENTER);
+        bottom.setPadding(dp(4), dp(5), dp(4), dp(5));
+        bottom.setBackgroundColor(Color.rgb(9, 11, 17));
+
+        Button home = makeNavButton("Главная");
+        Button status = makeNavButton("Статус");
+        Button forum = makeNavButton("Форум");
+        Button mellai = makeNavButton("@mellai");
+
+        home.setOnClickListener(v -> open("/"));
+        status.setOnClickListener(v -> open("/status"));
+        forum.setOnClickListener(v -> open("/forum"));
+        mellai.setOnClickListener(v -> open("/u/mellai"));
+
+        bottom.addView(home, navParams());
+        bottom.addView(status, navParams());
+        bottom.addView(forum, navParams());
+        bottom.addView(mellai, navParams());
+
+        root.addView(top, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
         root.addView(webView, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1
+        ));
+        root.addView(bottom, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(62)
+        ));
+
         setContentView(root);
     }
 
-    private void showServerDialog(boolean required) {
-        EditText input = new EditText(this);
-        input.setHint("https://example.com");
-        input.setSingleLine(true);
-        input.setText(prefs.getString(KEY_URL, ""));
-        input.setPadding(dp(14), dp(10), dp(14), dp(10));
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Адрес сайта")
-                .setMessage("Введи домен или IP сервера. Приложение откроет /forum.")
-                .setView(input)
-                .setCancelable(!required)
-                .setPositiveButton("Сохранить", null)
-                .setNegativeButton(required ? null : "Отмена", null)
-                .create();
-
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String value = input.getText().toString().trim();
-            if (!value.startsWith("http://") && !value.startsWith("https://")) {
-                value = "https://" + value;
-            }
-            while (value.endsWith("/")) value = value.substring(0, value.length()-1);
-            if (value.length() < 8) {
-                input.setError("Укажи адрес сервера");
-                return;
-            }
-            prefs.edit().putString(KEY_URL, value).apply();
-            dialog.dismiss();
-            loadForum(value);
-        }));
-        dialog.show();
+    private Button makeTopButton(String text) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(19);
+        b.setTextColor(Color.WHITE);
+        b.setBackgroundColor(Color.TRANSPARENT);
+        b.setAllCaps(false);
+        return b;
     }
 
-    private void loadForum(String root) {
-        String target = root.endsWith("/forum") ? root : root + "/forum";
-        webView.loadUrl(target);
+    private Button makeNavButton(String text) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(12);
+        b.setTextColor(Color.rgb(225, 228, 236));
+        b.setBackgroundColor(Color.TRANSPARENT);
+        b.setAllCaps(false);
+        b.setPadding(dp(2), 0, dp(2), 0);
+        return b;
+    }
+
+    private LinearLayout.LayoutParams navParams() {
+        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+    }
+
+    private void open(String path) {
+        webView.loadUrl(BASE_URL + path);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        webView.saveState(outState);
+        super.onSaveInstanceState(outState);
     }
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            open("/");
+        }
     }
 
     @Override
@@ -164,7 +205,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private int dp(int v) {
-        return Math.round(v * getResources().getDisplayMetrics().density);
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
