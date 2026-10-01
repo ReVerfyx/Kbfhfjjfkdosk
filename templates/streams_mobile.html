@@ -1,0 +1,5 @@
+{% extends "base_mobile.html" %}{% block title %}Стримы{% endblock %}{% block content %}
+<section class="mobile-stream-hero {% if stream.is_live %}live{% endif %}"><small>STREAM WATCH · 5 МИН</small><h1>{% if stream.is_live %}Сейчас в эфире{% else %}Сейчас оффлайн{% endif %}</h1><p>{{stream.title or 'Монитор ждёт следующий эфир'}}</p><span>{{stream.last_online or 'Последняя активность уточняется'}}</span>{% if stream.url %}<a class="v4-primary mobile-full" href="{{stream.url}}" target="_blank">Источник</a>{% endif %}</section>
+<div class="mobile-section-title"><div><small>HISTORY</small><h2>История эфиров</h2></div></div>
+<div class="mobile-stream-list">{% for x in history %}<div><span></span><section><b>{{x.title}}</b><small>{{x.started_at or x.ended_at or x.created_at}}</small><em>{{x.source}}</em></section>{% if x.url %}<a href="{{x.url}}" target="_blank">↗</a>{% endif %}</div>{% else %}<p class="v4-empty">История появится после первого запуска монитора.</p>{% endfor %}</div>
+{% endblock %}
