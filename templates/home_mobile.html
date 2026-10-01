@@ -1,0 +1,11 @@
+{% extends "base_mobile.html" %}{% block content %}
+<section class="mobile-status-card status-{{st.code}}">
+  <div class="mobile-status-photo"></div><div class="mobile-status-shade"></div>
+  <div class="mobile-status-content"><div class="v4-kicker">ПРОВЕРКА КАЖДЫЕ 5 МИНУТ</div><h1>{{st.label}}</h1><p>{{st.detail}}</p><div class="mobile-location"><b>Локация:</b> {{st.location}}</div><a class="v4-primary mobile-full" href="/status">Открыть статус</a></div>
+</section>
+<section class="mobile-quick-grid"><a href="/streams"><small>СТРИМ</small><b>{% if stream.is_live %}В ЭФИРЕ{% else %}Оффлайн{% endif %}</b><span>{{stream.last_online or 'Проверяется'}}</span></a><a href="/forum"><small>ФОРУМ</small><b>{{posts|length}} свежих</b><span>Посты сообщества</span></a></section>
+<div class="mobile-section-title"><div><small>СООБЩЕСТВО</small><h2>Свежие посты</h2></div><a href="/forum">Все</a></div>
+<div class="mobile-feed">{% for p in posts[:4] %}{% include "_post.html" %}{% endfor %}</div>
+<div class="mobile-section-title"><div><small>МОНИТОР</small><h2>Последние сигналы</h2></div><a href="/status">Все</a></div>
+<div class="mobile-signals">{% for e in events[:5] %}<a href="{{e.url}}" target="_blank" class="{% if e.urgent %}urgent{% endif %}"><span></span><div><b>{{e.title}}</b><small>{{e.source}}</small></div></a>{% endfor %}</div>
+{% endblock %}
