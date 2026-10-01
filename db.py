@@ -112,6 +112,53 @@ def init_db():
           expires_at INTEGER NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS follows(
+          follower_id INTEGER NOT NULL,
+          following_id INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(follower_id, following_id),
+          CHECK(follower_id != following_id),
+          FOREIGN KEY(follower_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY(following_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS verification_requests(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          message TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          reviewed_at TEXT,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS support_payments(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          provider TEXT NOT NULL,
+          amount_rub REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          external_id TEXT,
+          payment_url TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          paid_at TEXT,
+          meta_json TEXT,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_support_external ON support_payments(provider, external_id);
+
+        CREATE TABLE IF NOT EXISTS moderation_log(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          kind TEXT NOT NULL,
+          target_id INTEGER,
+          decision TEXT NOT NULL,
+          reason TEXT,
+          score REAL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
         CREATE TABLE IF NOT EXISTS status(
           id INTEGER PRIMARY KEY CHECK(id=1),
           code TEXT NOT NULL DEFAULT 'checking',
@@ -124,3 +171,28 @@ def init_db():
         );
         INSERT OR IGNORE INTO status(id) VALUES(1);
         """)
+
+        # Safe in-place schema upgrades for existing VPS databases.
+        user_cols = {row["name"] for row in con.execute("PRAGMA table_info(users)")}
+        for name, ddl in {
+            "display_name": "TEXT",
+            "bio": "TEXT",
+            "avatar_path": "TEXT",
+            "cover_path": "TEXT",
+            "cover_type": "TEXT NOT NULL DEFAULT 'image'",
+            "verified": "INTEGER NOT NULL DEFAULT 0",
+            "sponsor_badge": "INTEGER NOT NULL DEFAULT 0",
+            "theme": "TEXT NOT NULL DEFAULT 'dark'",
+            "music_title": "TEXT",
+            "music_path": "TEXT",
+        }.items():
+            if name not in user_cols:
+                con.execute(f"ALTER TABLE users ADD COLUMN {name} {ddl}")
+
+        post_cols = {row["name"] for row in con.execute("PRAGMA table_info(posts)")}
+        for name, ddl in {
+            "video_path": "TEXT",
+            "moderation_state": "TEXT NOT NULL DEFAULT 'approved'",
+        }.items():
+            if name not in post_cols:
+                con.execute(f"ALTER TABLE posts ADD COLUMN {name} {ddl}")
