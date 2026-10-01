@@ -25,11 +25,26 @@ jobs:
         run: python -m py_compile app.py db.py monitor.py
       - name: Install backend requirements
         run: pip install -r requirements.txt
-      - name: Import application
+      - name: Import application and render desktop/mobile pages
         env:
           MW_SECRET_KEY: test-secret
           MW_DB: /tmp/mama-test.db
           MW_SOURCES: ./sources.json
           MW_ADMIN_USER: admin
           MW_ADMIN_PASSWORD: test-password-123
-        run: python -c "import app; print('backend import ok')"
+        run: |
+          python - <<'PY'
+          import app
+          client = app.app.test_client()
+          cases = [
+              ("desktop", "Mozilla/5.0 (X11; Linux x86_64) Chrome/140"),
+              ("mobile", "Mozilla/5.0 (Linux; Android 16; Mobile) Chrome/140"),
+          ]
+          for name, ua in cases:
+              for path in ("/", "/status", "/streams", "/forum", "/login", "/register"):
+                  response = client.get(path, headers={"User-Agent": ua})
+                  assert response.status_code == 200, (name, path, response.status_code)
+                  assert b"Traceback" not in response.data
+                  print(name, path, response.status_code, len(response.data))
+          print("backend render ok")
+          PY
