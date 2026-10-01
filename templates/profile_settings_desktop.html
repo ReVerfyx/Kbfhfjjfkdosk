@@ -1,0 +1,11 @@
+{% extends "base_desktop.html" %}{% block title %}Редактирование профиля{% endblock %}{% block content %}
+<section class="settings-card"><div class="v4-section-head"><div><small>PROFILE</small><h2>Редактирование профиля</h2></div></div>
+<form method="post" enctype="multipart/form-data" class="settings-form"><input type="hidden" name="_csrf" value="{{csrf_token()}}">
+<label>Отображаемое имя<input name="display_name" maxlength="40" value="{{user.display_name}}"></label>
+<label>О себе<textarea name="bio" maxlength="180">{{user.bio}}</textarea></label>
+<div class="settings-row"><label>Аватар<input type="file" name="avatar" accept="image/*"></label><label>Фон профиля<input type="file" name="cover" accept="image/*,video/*"></label><label>Музыка<input type="file" name="music" accept="audio/*"></label></div>
+<label>Название музыки<input name="music_title" maxlength="80" value="{{user.music_title}}"></label>
+<label>Тема<select name="theme"><option value="dark">Тёмная</option><option value="black">Чёрная</option><option value="violet">Фиолетовая</option><option value="red">Красная</option></select></label>
+<button class="v4-primary">Сохранить</button></form></section>
+<section class="settings-card verify-card"><h3>Верификация</h3><p>Можно отправить заявку на синюю галочку. Решение принимается после проверки профиля.</p><form action="/verification/request" method="post"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><textarea name="message" maxlength="500" placeholder="Коротко расскажи, почему профиль стоит верифицировать"></textarea><button class="v4-secondary">Отправить заявку</button></form></section>
+{% endblock %}
