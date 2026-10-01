@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{"Регистрация" if mode=="register" else "Вход"}} · МАМА-ПТИЦА{% endblock %}
+{% block content %}
+<section class="authscene">
+  <div class="authvisual"></div>
+  <form class="authcard" method="post">
+    <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+    <div class="eyebrow">MAMA BIRD ACCOUNT</div>
+    <h1>{{"Создать аккаунт" if mode=="register" else "Войти"}}</h1>
+    <label>Юзернейм<input name="username" minlength="3" maxlength="24" required autocomplete="username" placeholder="@username"></label>
+    <label>Пароль<input name="password" type="password" minlength="8" required autocomplete="{{'new-password' if mode=='register' else 'current-password'}}" placeholder="••••••••"></label>
+    <label>Проверка</label>
+    <div class="captcha"><img id="cap" src="/captcha.svg" alt="CAPTCHA"><button type="button" onclick="document.getElementById('cap').src='/captcha.svg?'+Date.now()">↻</button></div>
+    <input name="captcha" maxlength="5" placeholder="5 символов" required autocomplete="off">
+    <button class="publish full">{{"Зарегистрироваться" if mode=="register" else "Войти"}}</button>
+    <p class="muted">{% if mode=="register" %}Уже есть аккаунт? <a href="/login">Войти</a>{% else %}Нет аккаунта? <a href="/register">Регистрация</a>{% endif %}</p>
+  </form>
+</section>
+{% endblock %}

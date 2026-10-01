@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<section id="status" class="statushero status-{{st.code}}">
+  <div class="statusshade"></div>
+  <div class="heroinner">
+    <div class="eyebrow">LIVE STATUS · PUBLIC SOURCES</div>
+    <h1>СПАСАЕМ<br><span>МАМУ-ПТИЦУ</span></h1>
+    <p class="lead">Новости, публичные посты, стрим‑активность и сообщество в одном месте.</p>
+    <div class="statuscard">
+      <div class="statusdot"></div>
+      <div>
+        <div class="statuslabel">{{st.label}}</div>
+        <div class="statusdetail">{{st.detail}}</div>
+      </div>
+    </div>
+    <div class="herochips">
+      <span>📍 {{st.location}}</span>
+      <span>↻ {{st.updated_at}}</span>
+      {% if st.source_url %}<a href="{{st.source_url}}" target="_blank" rel="noopener">Источник ↗</a>{% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="layout">
+  <div class="feedcol" id="forum">
+    <div class="feedhead">
+      <div><span class="eyebrow">COMMUNITY</span><h2>Лента</h2></div>
+      <a class="ghost" href="#composer">Новый пост</a>
+    </div>
+
+    {% if me %}
+    <form id="composer" class="composer" action="/post" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+      <div class="avatar big">{{me.username[:1]|upper}}</div>
+      <div class="composebody">
+        <textarea data-autogrow name="body" maxlength="500" placeholder="Что происходит?"></textarea>
+        <div class="composebottom">
+          <label class="uploadbtn">▧ Фото<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
+          <span class="limit">до 500 символов</span>
+          <button class="publish">Опубликовать</button>
+        </div>
+      </div>
+    </form>
+    {% else %}
+    <div class="loginbanner"><div><b>Присоединяйся к форуму</b><span>Пиши посты, прикрепляй фото и отвечай другим.</span></div><a href="/register">Создать аккаунт</a></div>
+    {% endif %}
+
+    <div class="postlist">
+      {% for p in posts %}{% include "_post.html" %}{% else %}
+      <div class="empty">Пока тихо. Здесь появятся первые публикации.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <aside class="sidecol">
+    <div class="sidecard livecard">
+      <div class="sidehead"><h3>Мониторинг</h3><span class="livebadge">LIVE</span></div>
+      <p>Проверяет публичные новости, официальные страницы, Telegram и другие подключённые источники.</p>
+      <a href="/api/status">Открыть JSON API →</a>
+    </div>
+    <div class="sidecard">
+      <div class="sidehead"><h3>Последние сигналы</h3><span>{{events|length}}</span></div>
+      <div class="signals">
+      {% for e in events %}
+        <a href="{{e.url}}" target="_blank" rel="noopener" class="signal {% if e.urgent %}urgent{% endif %}">
+          <b>{{e.title}}</b>
+          <span>{{e.source}}{% if e.official %} · официальный{% endif %}</span>
+        </a>
+      {% else %}<div class="empty mini">Монитор собирает данные.</div>{% endfor %}
+      </div>
+    </div>
+    <div class="sidecard mosaic">
+      <div class="m m1"></div><div class="m m2"></div><div class="m m3"></div>
+      <div class="mcaption">Архив настроений</div>
+    </div>
+  </aside>
+</section>
+{% endblock %}

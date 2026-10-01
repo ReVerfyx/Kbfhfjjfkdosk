@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Админка{% endblock %}
+{% block content %}
+<section class="adminhead"><span class="eyebrow">CONTROL ROOM</span><h1>Статус и монитор</h1></section>
+<section class="adminlayout">
+<form class="admincard" method="post">
+  <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+  <label>Режим
+    <select name="code">
+      {% for code,title in [
+        ('checking','Нет информации / проверяем'),
+        ('ok','Всё хорошо'),
+        ('alert','Тревожные новости / странные сообщения'),
+        ('possibly_detained','Возможно задержан'),
+        ('confirmed_detained','Задержание подтверждено')
+      ] %}<option value="{{code}}" {% if st.code==code %}selected{% endif %}>{{title}}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Заголовок<input name="label" value="{{st.label}}" required></label>
+  <label>Описание<textarea name="detail">{{st.detail}}</textarea></label>
+  <label>Публично сообщаемое место<input name="location" value="{{st.location}}"></label>
+  <label>Главный источник<input name="source_url" value="{{st.source_url or ''}}" placeholder="https://..."></label>
+  <label class="check"><input type="checkbox" name="manual_lock" value="1" {% if st.manual_lock %}checked{% endif %}> Зафиксировать вручную (монитор не переключит в «тревогу»)</label>
+  <button class="publish full">Сохранить статус</button>
+</form>
+<div class="admincard events">
+  <div class="sidehead"><h2>Сигналы</h2><span>{{events|length}}</span></div>
+  {% for e in events %}
+  <a href="{{e.url}}" target="_blank" rel="noopener" class="signal {% if e.urgent %}urgent{% endif %}">
+    <b>{{e.title}}</b><span>{{e.source}} · {{e.created_at}}</span>
+  </a>
+  {% endfor %}
+</div>
+</section>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Публикация @{{post.username}}{% endblock %}
+{% block content %}
+<section class="threadpage">
+  <a class="back" href="/#forum">← Лента</a>
+  <div class="threadcard">{% set p=post %}{% include "_post.html" %}</div>
+  {% if me %}
+  <form class="replybox" action="/post" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+    <input type="hidden" name="parent_id" value="{{post.id}}">
+    <textarea data-autogrow name="body" maxlength="500" placeholder="Написать ответ…"></textarea>
+    <div class="composebottom">
+      <label class="uploadbtn">▧ Фото<input type="file" name="image" accept="image/jpeg,image/png,image/webp"></label>
+      <button class="publish">Ответить</button>
+    </div>
+  </form>
+  {% endif %}
+  <div class="postlist replies">
+  {% for p in replies %}{% include "_post.html" %}{% else %}<div class="empty">Ответов пока нет.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

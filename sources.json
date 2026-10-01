@@ -1,0 +1,47 @@
+{
+  "news_queries": [
+    "Mellstroy",
+    "Меллстрой",
+    "Мелстрой",
+    "\"Андрей Бурим\"",
+    "Mellstroy Кипр",
+    "Mellstroy задержан",
+    "Mellstroy полиция",
+    "\"Андрей Бурим\" задержан",
+    "\"Андрей Бурим\" розыск"
+  ],
+  "telegram_channels": [
+    "mellstroy_melstroy_tellstroy_tg"
+  ],
+  "rss": [],
+  "webpages": [
+    {
+      "name": "АФМ Казахстана",
+      "url": "https://www.gov.kz/memleket/entities/afm/press/news?lang=ru",
+      "official": true
+    },
+    {
+      "name": "Индекс стримов",
+      "url": "https://gamblingwins.com/streamers/mellstroy",
+      "official": false
+    },
+    {
+      "name": "Telemetr",
+      "url": "https://telemetr.me/content/mellstroy_melstroy_tellstroy_tg",
+      "official": false
+    }
+  ],
+  "keywords": [
+    "mellstroy",
+    "меллстрой",
+    "мелстрой",
+    "андрей бурим",
+    "бурим",
+    "задерж",
+    "арест",
+    "полици",
+    "экстрадиц",
+    "розыск",
+    "стрим"
+  ]
+}

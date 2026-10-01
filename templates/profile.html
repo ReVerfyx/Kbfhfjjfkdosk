@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}@{{user.username}}{% endblock %}
+{% block content %}
+<section class="profilehero">
+  <div class="profilebg"></div>
+  <div class="profileavatar">{{user.username[:1]|upper}}</div>
+  <h1>@{{user.username}}</h1>
+  <p>В сообществе с {{user.created_at}}</p>
+</section>
+<section class="profilefeed">
+  <h2>Публикации</h2>
+  <div class="postlist">{% for p in posts %}{% include "_post.html" %}{% else %}<div class="empty">Публикаций пока нет.</div>{% endfor %}</div>
+</section>
+{% endblock %}
