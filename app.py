@@ -693,20 +693,37 @@ def api_v1_create_post(user):
     body = (request.form.get("body") or "").strip()
     parent_raw = (request.form.get("parent_id") or "").strip()
     parent_id = int(parent_raw) if parent_raw.isdigit() else None
-    try:
-        image_path = save_post_image(request.files.get("image"))
-    except ValueError as e:
-        return jsonify(error="image", message=str(e)), 400
-    if not body and not image_path:
-        return jsonify(error="empty", message="Напиши текст или прикрепи фото."), 400
     if len(body) > 500:
         return jsonify(error="body", message="Максимум 500 символов."), 400
+
+    ok, reason, score = moderate_text(body)
+    if not ok:
+        log_moderation(user["id"], "post_text", None, "blocked", reason, score)
+        return jsonify(error="moderation", message=reason or "Текст отклонён модерацией."), 400
+
+    image_path = None
+    video_path = None
+    try:
+        image_file = request.files.get("image")
+        video_file = request.files.get("video")
+        if image_file and image_file.filename:
+            image_path = save_moderated_image(image_file, prefix="post")
+        if video_file and video_file.filename:
+            video_path = save_video(video_file, "post", 120)
+    except ValueError as exc:
+        log_moderation(user["id"], "post_media", None, "blocked", str(exc), 1.0)
+        return jsonify(error="media", message=str(exc)), 400
+
+    if not body and not image_path and not video_path:
+        return jsonify(error="empty", message="Добавь текст, фото или видео."), 400
+
     with db() as con:
         cur = con.execute(
-            "INSERT INTO posts(user_id,body,image_path,parent_id) VALUES(?,?,?,?)",
-            (user["id"], body, image_path, parent_id)
+            "INSERT INTO posts(user_id,body,image_path,video_path,parent_id) VALUES(?,?,?,?,?)",
+            (user["id"], body, image_path, video_path, parent_id)
         )
         post_id = cur.lastrowid
+    log_moderation(user["id"], "post", post_id, "approved", None, 0.0)
     if body:
         maybe_mellai(parent_id or post_id, body)
     return jsonify(ok=True, post_id=post_id), 201
@@ -1069,22 +1086,31 @@ def create_post():
     body = request.form.get("body", "").strip()
     parent_id = request.form.get("parent_id", "").strip()
     parent = int(parent_id) if parent_id.isdigit() else None
-    image_path = None
-    try:
-        image_path = save_post_image(request.files.get("image"))
-    except ValueError as e:
-        flash(str(e))
-        return redirect(request.referrer or url_for("home"))
-    if not body and not image_path:
-        flash("Напиши текст или прикрепи фото.")
-        return redirect(request.referrer or url_for("home"))
     if len(body) > 500:
         flash("Максимум 500 символов.")
         return redirect(request.referrer or url_for("home"))
+    ok, reason, score = moderate_text(body)
+    if not ok:
+        flash(reason or "Текст отклонён модерацией.")
+        log_moderation(session["uid"], "post_text", None, "blocked", reason, score)
+        return redirect(request.referrer or url_for("home"))
+    image_path = None
+    video_path = None
+    try:
+        if request.files.get("image") and request.files.get("image").filename:
+            image_path = save_moderated_image(request.files.get("image"), prefix="post")
+        if request.files.get("video") and request.files.get("video").filename:
+            video_path = save_video(request.files.get("video"), "post", 120)
+    except ValueError as e:
+        flash(str(e))
+        return redirect(request.referrer or url_for("home"))
+    if not body and not image_path and not video_path:
+        flash("Добавь текст, фото или видео.")
+        return redirect(request.referrer or url_for("home"))
     with db() as con:
         cur = con.execute(
-            "INSERT INTO posts(user_id,body,image_path,parent_id) VALUES(?,?,?,?)",
-            (session["uid"], body, image_path, parent)
+            "INSERT INTO posts(user_id,body,image_path,video_path,parent_id) VALUES(?,?,?,?,?)",
+            (session["uid"], body, image_path, video_path, parent)
         )
         post_id = cur.lastrowid
     session["last_post_at"] = time.time()
@@ -1170,22 +1196,93 @@ def repost_post(post_id):
 
 @app.get("/u/<username>")
 def profile(username):
+    viewer = current_user()
     with db() as con:
         user = con.execute(
-            "SELECT id,username,created_at FROM users WHERE username=? COLLATE NOCASE",
-            (username,)
+            "SELECT id FROM users WHERE username=? COLLATE NOCASE", (username,)
         ).fetchone()
-        if not user:
-            abort(404)
-        posts = con.execute("""
-          SELECT p.*,u.username,
-          (SELECT COUNT(*) FROM likes l WHERE l.post_id=p.id) likes_count,
-          (SELECT COUNT(*) FROM posts r WHERE r.parent_id=p.id) replies_count,
-          (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id=p.id) reposts_count
-          FROM posts p JOIN users u ON u.id=p.user_id
-          WHERE p.user_id=? AND p.parent_id IS NULL ORDER BY p.created_at DESC
-        """, (user["id"],)).fetchall()
-    return render_template("profile.html", user=user, posts=posts)
+    if not user:
+        abort(404)
+    profile_data = user_payload(user["id"], viewer["id"] if viewer else None)
+    posts = feed_query("WHERE p.user_id=? AND p.parent_id IS NULL", (user["id"],))
+    return render_template(device_template("profile"), user=profile_data, posts=posts)
+
+@app.post("/u/<username>/follow")
+@login_required
+def follow_web(username):
+    with db() as con:
+        target = con.execute("SELECT id FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone()
+        if not target or target["id"] == session["uid"]:
+            return redirect(url_for("profile", username=username))
+        exists = con.execute(
+            "SELECT 1 FROM follows WHERE follower_id=? AND following_id=?",
+            (session["uid"], target["id"])
+        ).fetchone()
+        if exists:
+            con.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (session["uid"], target["id"]))
+        else:
+            con.execute("INSERT INTO follows(follower_id,following_id) VALUES(?,?)", (session["uid"], target["id"]))
+    return redirect(url_for("profile", username=username))
+
+@app.route("/settings/profile", methods=["GET", "POST"])
+@login_required
+def profile_settings():
+    if request.method == "POST":
+        display_name = (request.form.get("display_name") or "").strip()[:40]
+        bio = (request.form.get("bio") or "").strip()[:180]
+        theme = request.form.get("theme", "dark")
+        music_title = (request.form.get("music_title") or "").strip()[:80]
+        ok, reason, score = moderate_text(f"{display_name}\n{bio}")
+        if not ok:
+            flash(reason or "Описание отклонено модерацией.")
+            return redirect(url_for("profile_settings"))
+        try:
+            avatar = save_moderated_image(request.files.get("avatar"), prefix="avatar") if request.files.get("avatar") and request.files.get("avatar").filename else None
+            cover = None
+            cover_type = None
+            cf = request.files.get("cover")
+            if cf and cf.filename:
+                if (cf.mimetype or "").startswith("video/"):
+                    cover = save_video(cf, "cover", 18)
+                    cover_type = "video"
+                else:
+                    cover = save_moderated_image(cf, prefix="cover")
+                    cover_type = "image"
+            music = save_audio(request.files.get("music")) if request.files.get("music") and request.files.get("music").filename else None
+        except ValueError as exc:
+            flash(str(exc))
+            return redirect(url_for("profile_settings"))
+        with db() as con:
+            old = con.execute("SELECT * FROM users WHERE id=?", (session["uid"],)).fetchone()
+            con.execute(
+                "UPDATE users SET display_name=?,bio=?,theme=?,music_title=?,avatar_path=?,cover_path=?,cover_type=?,music_path=? WHERE id=?",
+                (display_name or old["username"], bio, theme if theme in ("dark","black","violet","red") else "dark",
+                 music_title, avatar or old["avatar_path"], cover or old["cover_path"],
+                 cover_type or old["cover_type"], music or old["music_path"], session["uid"])
+            )
+        flash("Профиль обновлён.")
+        return redirect(url_for("profile", username=current_user()["username"]))
+    return render_template(device_template("profile_settings"), user=user_payload(session["uid"], session["uid"]))
+
+@app.post("/verification/request")
+@login_required
+def verification_request_web():
+    message = (request.form.get("message") or "").strip()[:500]
+    with db() as con:
+        pending = con.execute(
+            "SELECT 1 FROM verification_requests WHERE user_id=? AND status='pending'",
+            (session["uid"],)
+        ).fetchone()
+        if not pending:
+            con.execute("INSERT INTO verification_requests(user_id,message) VALUES(?,?)", (session["uid"], message))
+    flash("Заявка отправлена.")
+    return redirect(url_for("profile_settings"))
+
+
+@app.route("/support", methods=["GET", "POST"])
+def support():
+    cfg = support_public_config()
+    return render_template(device_template("support"), support=cfg)
 
 @app.route("/admin", methods=["GET", "POST"])
 @admin_required
