@@ -1,0 +1,35 @@
+name: Проверка VPS backend
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "app.py"
+      - "db.py"
+      - "monitor.py"
+      - "sources.json"
+      - "templates/**"
+      - "static/**"
+      - ".github/workflows/server-check.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check
+        run: python -m py_compile app.py db.py monitor.py
+      - name: Install backend requirements
+        run: pip install -r requirements.txt
+      - name: Import application
+        env:
+          MW_SECRET_KEY: test-secret
+          MW_DB: /tmp/mama-test.db
+          MW_SOURCES: ./sources.json
+          MW_ADMIN_USER: admin
+          MW_ADMIN_PASSWORD: test-password-123
+        run: python -c "import app; print('backend import ok')"
