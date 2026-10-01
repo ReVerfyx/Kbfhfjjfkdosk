@@ -313,9 +313,27 @@ def evaluate_status():
 
 def cleanup():
     with db() as con:
+        # Старые версии монитора могли сохранить RSS-summary как сырой HTML.
+        rows = con.execute(
+            "SELECT id,title,summary FROM monitor_events ORDER BY id DESC LIMIT 2500"
+        ).fetchall()
+        for row in rows:
+            title = clean_text(row["title"])[:500]
+            summary = clean_text(row["summary"])[:1800]
+            if title != (row["title"] or "") or summary != (row["summary"] or ""):
+                con.execute(
+                    "UPDATE monitor_events SET title=?,summary=? WHERE id=?",
+                    (title, summary, row["id"])
+                )
+
+        # Один и тот же материал часто попадает в несколько поисковых запросов Google News.
+        con.execute(
+            "DELETE FROM monitor_events WHERE id NOT IN ("
+            "SELECT MAX(id) FROM monitor_events GROUP BY source,title,url)"
+        )
         con.execute(
             "DELETE FROM monitor_events WHERE id NOT IN "
-            "(SELECT id FROM monitor_events ORDER BY created_at DESC LIMIT 8000)"
+            "(SELECT id FROM monitor_events ORDER BY COALESCE(published_at,created_at) DESC LIMIT 8000)"
         )
         con.execute(
             "DELETE FROM stream_history WHERE id NOT IN "
