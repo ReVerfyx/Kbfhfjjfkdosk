@@ -21,7 +21,8 @@
 - публичный монитор Google News, Telegram, RSS и настраиваемых веб-страниц;
 - @mellai через локальный Qwen 2.5 1.5B;
 - systemd + nginx;
-- отдельная ветка android-forum с полной Android-версией.
+- полноценный JSON API `/api/v1/` для нативного клиента;
+- отдельная ветка `android-native` с Kotlin + Jetpack Compose приложением без WebView.
 
 ## VPS / Ubuntu 24.04
 
@@ -52,19 +53,24 @@ sudo systemctl restart mama-bird nginx
 
 ## Android
 
-Ветка: `android-forum`
+Актуальная ветка: `android-native`.
 
-Android-приложение версии 2.0 уже привязано к **https://mellstroy.work.gd**. Адрес сервера вводить не нужно.
+Версия **3.0-native** написана на Kotlin + Jetpack Compose и не использует WebView.
 
 В приложении доступны:
 
-- Главная
-- Статус
-- Форум
-- @mellai
-- вход и cookies
-- публикация фото
-- тревожный режим сайта
+- нативная главная лента;
+- статус и публичная хронология;
+- форум в стиле Reddit/X;
+- посты, фото, ответы, лайки и просмотры;
+- нативный чат @mellai;
+- вход/регистрация через API + CAPTCHA;
+- профиль пользователя;
+- тревожная красная индикация и alarm-tone;
+- разные статусные фото;
+- домен `https://mellstroy.work.gd` зашит в API-клиент.
+
+Старая ветка `android-forum` оставлена только как архив WebView-прототипа.
 
 ## Граница мониторинга
 
