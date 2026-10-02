@@ -43,7 +43,7 @@
   <div class="sidehead"><h2>Сигналы</h2><span>{{events|length}}</span></div>
   {% for e in events %}
   <a href="{{e.url}}" target="_blank" rel="noopener" class="signal {% if e.urgent %}urgent{% endif %}">
-    <b>{{e.title}}</b><span>{{e.source}} · {{e.created_at}}</span>
+    <b>{{e.title}}</b><span>{{e.source}} · <span class="local-time" data-utc="{{e.created_at}}">{{e.created_at}}</span></span>
   </a>
   {% endfor %}
 </div></div>
