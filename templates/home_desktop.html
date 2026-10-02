@@ -9,11 +9,11 @@
   <div><small>Проверка источников</small><b>каждые 5 минут</b></div>
   <div><small>Локация</small><b>{{st.location}}</b></div>
   <div><small>Стрим</small><b>{% if stream.is_live %}В эфире{% else %}Оффлайн{% endif %}</b></div>
-  <div><small>Последнее обновление</small><b>{{st.updated_at}}</b></div>
+  <div><small>Последнее обновление</small><b class="local-time" data-utc="{{st.updated_at}}">{{st.updated_at}}</b></div>
 </section>
 <section class="desk-grid">
   <div class="v4-panel span2"><div class="v4-section-head"><div><small>ПЕРВИЧНЫЕ ИСТОЧНИКИ + СМИ</small><h2>Последние сигналы</h2></div><a href="/status">Вся хронология</a></div>
-    <div class="signal-v4-list">{% for e in events[:8] %}<a href="{{e.url}}" target="_blank" rel="noopener" class="signal-v4 {% if e.urgent %}urgent{% endif %}"><span></span><div><b>{{e.title}}</b><small>{{e.source}} · {{e.published_at or e.created_at}}</small>{% if e.summary %}<p>{{e.summary[:170]}}{% if e.summary|length>170 %}…{% endif %}</p>{% endif %}</div></a>{% endfor %}</div>
+    <div class="signal-v4-list">{% for e in events[:8] %}<a href="{{e.url}}" target="_blank" rel="noopener" class="signal-v4 {% if e.urgent %}urgent{% endif %}"><span></span><div><b>{{e.title}}</b><small>{{e.source}} · <span class="local-time" data-utc="{{e.published_at or e.created_at}}">{{e.published_at or e.created_at}}</span></small>{% if e.summary %}<p>{{e.summary[:170]}}{% if e.summary|length>170 %}…{% endif %}</p>{% endif %}</div></a>{% endfor %}</div>
   </div>
   <aside class="v4-panel"><div class="v4-section-head"><div><small>STREAM WATCH</small><h2>Стримы</h2></div></div><div class="stream-card {% if stream.is_live %}live{% endif %}"><b>{% if stream.is_live %}Сейчас в эфире{% else %}Сейчас оффлайн{% endif %}</b><p>{{stream.title or 'Последний эфир отслеживается автоматически'}}</p><small>{{stream.source or 'Telegram @mellstroystream + индекс стримов'}}</small></div><a class="v4-wide-link" href="/streams">Открыть монитор стримов →</a></aside>
 </section>
