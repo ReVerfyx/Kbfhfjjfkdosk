@@ -34,6 +34,13 @@ _login_fail = {}
 _tz_cache = {}
 
 
+def clean_text(value):
+    if not value:
+        return ""
+    from bs4 import BeautifulSoup
+    text = BeautifulSoup(str(value), "html.parser").get_text(" ", strip=True)
+    return re.sub(r"\s+", " ", text).strip()
+
 def client_ip():
     raw = (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()
     try:
