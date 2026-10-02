@@ -7,6 +7,8 @@ on:
       - "app.py"
       - "db.py"
       - "monitor.py"
+      - "moderation.py"
+      - "install.sh"
       - "sources.json"
       - "templates/**"
       - "static/**"
@@ -49,7 +51,7 @@ jobs:
                   assert response.status_code == 200, (name, path, response.status_code)
                   assert b"Traceback" not in response.data
                   print(name, path, response.status_code, len(response.data))
-          for path in ("/api/v1/status", "/api/v1/feed", "/api/v1/support"):
+          for path in ("/api/v1/status", "/api/v1/feed", "/api/v1/support", "/api/v1/timezone"):
               response = client.get(path)
               assert response.status_code == 200, (path, response.status_code)
               assert response.is_json, path
