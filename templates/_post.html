@@ -1,7 +1,7 @@
 <article class="reddit-post">
   <div class="reddit-head">
     <a class="reddit-avatar" href="/u/{{p.username}}">{{p.username[:1]|upper}}</a>
-    <div class="reddit-author"><a href="/u/{{p.username}}">@{{p.username}} {% if p.verified %}<span class="mini-badge verified">✓</span>{% endif %}{% if p.sponsor_badge %}<span class="mini-badge sponsor">★</span>{% endif %}</a><small>{{p.created_at}}</small></div>
+    <div class="reddit-author"><a href="/u/{{p.username}}">@{{p.username}} {% if p.verified %}<span class="mini-badge verified">✓</span>{% endif %}{% if p.sponsor_badge %}<span class="mini-badge sponsor">★</span>{% endif %}</a><small class="local-time" data-utc="{{p.created_at}}">{{p.created_at}}</small></div>
   </div>
   {% if p.body %}<div class="reddit-text">{{p.body}}</div>{% endif %}
   {% if p.video_path %}<a class="reddit-media" href="/p/{{p.id}}"><video src="/static/{{p.video_path}}" controls playsinline preload="metadata"></video></a>{% elif p.image_path %}<a class="reddit-media" href="/p/{{p.id}}"><img src="/static/{{p.image_path}}" alt="Фото"></a>{% endif %}
