@@ -441,11 +441,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!requireAuth()) return
         val clean = text.trim()
         if (clean.isEmpty() || chatBusy) return
+        val history = chat.takeLast(8).map {
+            MellaiHistoryDto(
+                role = if (it.fromUser) "user" else "assistant",
+                content = it.text
+            )
+        }
         chat = chat + ChatMessage(clean, true)
         chatBusy = true
         viewModelScope.launch {
             try {
-                val response = api.mellai(MellaiRequest(clean))
+                val response = api.mellai(MellaiRequest(clean, history))
                 chat = chat + ChatMessage(
                     if (response.isSuccessful && response.body() != null) response.body()!!.reply
                     else client.errorMessage(response),
