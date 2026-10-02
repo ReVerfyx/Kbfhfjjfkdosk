@@ -22,12 +22,92 @@ python3 -m venv "$APP/venv"
 # AI media moderation is optional at runtime, but install it when possible.
 "$APP/venv/bin/pip" install "nudenet>=3.4" "onnxruntime>=1.19" || true
 
-# Локальный ИИ для @mellai. Qwen 2.5 1.5B — компромисс между качеством и нагрузкой.
-if ! command -v ollama >/dev/null 2>&1; then
-  curl -fsSL https://ollama.com/install.sh | sh || true
+# Локальный ИИ для @mellai. Не подменяем ИИ мгновенными шаблонными ответами.
+MELLAI_MODEL="qwen2.5:3b"
+
+install_ollama() {
+  if command -v ollama >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "[AI] Устанавливаю Ollama..."
+  rm -f /tmp/ollama-install.sh /tmp/ollama.tgz
+
+  if curl -fL --retry 5 --retry-delay 3 --retry-all-errors       https://ollama.com/install.sh -o /tmp/ollama-install.sh; then
+    sh /tmp/ollama-install.sh || true
+  fi
+
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo "[AI] Основной установщик недоступен, пробую GitHub release..."
+    if curl -fL --retry 5 --retry-delay 3 --retry-all-errors         https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tgz         -o /tmp/ollama.tgz; then
+      tar -C /usr -xzf /tmp/ollama.tgz
+    fi
+  fi
+
+  command -v ollama >/dev/null 2>&1
+}
+
+if install_ollama; then
+  if ! id ollama >/dev/null 2>&1; then
+    useradd -r -s /usr/sbin/nologin -d /usr/share/ollama -m ollama
+  fi
+  mkdir -p /usr/share/ollama
+  chown -R ollama:ollama /usr/share/ollama
+
+  if [ ! -f /etc/systemd/system/ollama.service ] && [ ! -f /lib/systemd/system/ollama.service ]; then
+    OLLAMA_BIN="$(command -v ollama)"
+    cat >/etc/systemd/system/ollama.service <<EOF
+[Unit]
+Description=Ollama local inference server
+After=network-online.target
+
+[Service]
+ExecStart=$OLLAMA_BIN serve
+User=ollama
+Group=ollama
+Environment=HOME=/usr/share/ollama
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=OLLAMA_KEEP_ALIVE=30m
+Environment=OLLAMA_NUM_PARALLEL=1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  fi
+
+  mkdir -p /etc/systemd/system/ollama.service.d
+  cat >/etc/systemd/system/ollama.service.d/mama-bird.conf <<EOF
+[Service]
+Environment=OLLAMA_KEEP_ALIVE=30m
+Environment=OLLAMA_NUM_PARALLEL=1
+EOF
+
+  systemctl daemon-reload
+  systemctl enable --now ollama
+  for _ in {1..30}; do
+    curl -fsS http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && break
+    sleep 1
+  done
+
+  echo "[AI] Загружаю $MELLAI_MODEL..."
+  if id ollama >/dev/null 2>&1; then
+    runuser -u ollama -- env HOME=/usr/share/ollama "$(command -v ollama)" pull "$MELLAI_MODEL"
+  else
+    ollama pull "$MELLAI_MODEL"
+  fi
+
+  echo "[AI] Проверяю реальную генерацию..."
+  TEST_JSON="$(curl -fsS --max-time 90 http://127.0.0.1:11434/api/generate     -H 'Content-Type: application/json'     -d "{\"model\":\"$MELLAI_MODEL\",\"prompt\":\"Ответь одним словом: работает\",\"stream\":false}" || true)"
+  if echo "$TEST_JSON" | grep -q '"response"'; then
+    echo "[AI] @mellai: модель отвечает."
+  else
+    echo "[AI] ВНИМАНИЕ: Ollama установлен, но тест генерации не прошёл."
+  fi
+else
+  echo "[AI] ВНИМАНИЕ: Ollama установить не удалось. @mellai будет показывать недоступность, а не фальшивый шаблон."
 fi
-systemctl enable --now ollama 2>/dev/null || true
-ollama pull qwen2.5:1.5b || true
 
 ADMIN_PASS=""
 if [ ! -f /etc/mama-bird.env ]; then
@@ -41,11 +121,11 @@ MW_DB=$APP/data/app.db
 MW_SOURCES=$APP/sources.json
 MW_HTTPS=0
 MW_OLLAMA_URL=http://127.0.0.1:11434
-MW_MELLAI_MODEL=qwen2.5:1.5b
+MW_MELLAI_MODEL=qwen2.5:3b
 MW_PUBLIC_URL=https://mellstroy.work.gd
 MW_AI_TEXT_MODERATION=1
 MW_AI_MEDIA_MODERATION=1
-MW_MODERATION_MODEL=qwen2.5:1.5b
+MW_MODERATION_MODEL=qwen2.5:3b
 MW_NSFW_THRESHOLD=0.58
 MW_TON_WALLET=
 MW_LOLZ_API_BASE=
@@ -55,11 +135,11 @@ MW_LOLZ_WEBHOOK_SECRET=
 EOF
 else
   if grep -q '^MW_MELLAI_MODEL=' /etc/mama-bird.env; then
-    sed -i 's/^MW_MELLAI_MODEL=.*/MW_MELLAI_MODEL=qwen2.5:1.5b/' /etc/mama-bird.env
+    sed -i 's/^MW_MELLAI_MODEL=.*/MW_MELLAI_MODEL=qwen2.5:3b/' /etc/mama-bird.env
   else
-    echo 'MW_MELLAI_MODEL=qwen2.5:1.5b' >> /etc/mama-bird.env
+    echo 'MW_MELLAI_MODEL=qwen2.5:3b' >> /etc/mama-bird.env
   fi
-  for row in     'MW_AI_TEXT_MODERATION=1'     'MW_AI_MEDIA_MODERATION=1'     'MW_MODERATION_MODEL=qwen2.5:1.5b'     'MW_NSFW_THRESHOLD=0.58'     'MW_TON_WALLET='     'MW_LOLZ_API_BASE='     'MW_LOLZ_API_TOKEN='     'MW_LOLZ_MERCHANT_ID='     'MW_LOLZ_WEBHOOK_SECRET='; do
+  for row in     'MW_AI_TEXT_MODERATION=1'     'MW_AI_MEDIA_MODERATION=1'     'MW_MODERATION_MODEL=qwen2.5:3b'     'MW_NSFW_THRESHOLD=0.58'     'MW_TON_WALLET='     'MW_LOLZ_API_BASE='     'MW_LOLZ_API_TOKEN='     'MW_LOLZ_MERCHANT_ID='     'MW_LOLZ_WEBHOOK_SECRET='; do
       key="${row%%=*}"
       grep -q "^${key}=" /etc/mama-bird.env || echo "$row" >> /etc/mama-bird.env
   done
