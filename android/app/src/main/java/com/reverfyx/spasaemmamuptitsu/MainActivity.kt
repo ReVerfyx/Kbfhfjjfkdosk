@@ -126,6 +126,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1667,5 +1670,19 @@ private fun statusPhoto(code: String?): String = when (code) {
 
 private fun shortDate(raw: String): String {
     if (raw.isBlank()) return ""
-    return raw.replace("T", " ").take(16)
+    val cleaned = raw
+        .replace("T", " ")
+        .substringBefore("+")
+        .substringBefore("Z")
+        .substringBefore(".")
+        .take(19)
+    return try {
+        val parser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val date = parser.parse(cleaned) ?: return raw.take(16)
+        SimpleDateFormat("dd.MM · HH:mm", Locale.getDefault()).format(date)
+    } catch (_: Exception) {
+        raw.replace("T", " ").take(16)
+    }
 }
